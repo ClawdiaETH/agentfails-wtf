@@ -3,10 +3,14 @@
  *
  * Fixed three-section layout regardless of screenshot dimensions:
  *   Title bar : 52px
- *   Screenshot: 488px  (image is contained + centered; excess is letterboxed)
+ *   Screenshot: 488px  (image contained + letterboxed)
  *   Footer    : 90px
  *   ──────────────────
  *   Total     : 630px  (standard 1200×630 OG)
+ *
+ * ?hq=1  →  2400×1260 high-quality version for download
+ *
+ * Fonts: Space Grotesk loaded from Google Fonts (cached in module scope).
  */
 
 import { ImageResponse } from 'next/og';
@@ -15,10 +19,37 @@ import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const W = 1200;
-const TITLEBAR_H = 52;
-const FOOTER_H   = 90;
-const IMG_H      = 630 - TITLEBAR_H - FOOTER_H; // 488
+// ── Font loading (cached across requests) ────────────────────────────────────
+
+let fontRegular: ArrayBuffer | null = null;
+let fontBold:    ArrayBuffer | null = null;
+
+async function loadGoogleFont(weight: 400 | 700): Promise<ArrayBuffer | null> {
+  try {
+    const css = await fetch(
+      `https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@${weight}&display=swap`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' } },
+    ).then(r => r.text());
+
+    const url = css.match(/url\((.+?\.woff2)\)/)?.[1];
+    if (!url) return null;
+    return fetch(url).then(r => r.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+async function getFonts() {
+  if (!fontRegular) fontRegular = await loadGoogleFont(400);
+  if (!fontBold)    fontBold    = await loadGoogleFont(700);
+
+  const fonts: { name: string; data: ArrayBuffer; weight: 400 | 700; style: 'normal' }[] = [];
+  if (fontRegular) fonts.push({ name: 'Space Grotesk', data: fontRegular, weight: 400, style: 'normal' });
+  if (fontBold)    fonts.push({ name: 'Space Grotesk', data: fontBold,    weight: 700, style: 'normal' });
+  return fonts;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const FAIL_LABELS: Record<string, string> = {
   hallucination: '🏜️ Hallucination',
@@ -56,11 +87,22 @@ function getSupabaseAdmin() {
   );
 }
 
+// ── Route ─────────────────────────────────────────────────────────────────────
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hq = req.nextUrl.searchParams.has('hq');
+
+  // Scale everything by 2 for HQ download
+  const scale      = hq ? 2 : 1;
+  const W          = 1200 * scale;
+  const H          = 630  * scale;
+  const TITLEBAR_H = 52   * scale;
+  const IMG_H      = 488  * scale;
+  const FOOTER_H   = 90   * scale;
 
   const { data: post } = await getSupabaseAdmin()
     .from('posts')
@@ -68,14 +110,15 @@ export async function GET(
     .eq('id', id)
     .single();
 
-  if (!post) {
-    return new Response('Post not found', { status: 404 });
-  }
+  if (!post) return new Response('Post not found', { status: 404 });
 
   const failLabel  = FAIL_LABELS[post.fail_type]  ?? post.fail_type;
   const agentLabel = AGENT_LABELS[post.agent]      ?? post.agent;
   const badge      = FAIL_BADGE[post.fail_type]    ?? FAIL_BADGE.other;
   const title      = post.title ?? '';
+
+  const fonts = await getFonts();
+  const fontFamily = fonts.length > 0 ? 'Space Grotesk' : 'ui-sans-serif, system-ui, sans-serif';
 
   return new ImageResponse(
     (
@@ -84,13 +127,13 @@ export async function GET(
           display:       'flex',
           flexDirection: 'column',
           width:         W,
-          height:        630,
+          height:        H,
           background:    '#0d0d12',
-          fontFamily:    'ui-sans-serif, system-ui, -apple-system, sans-serif',
+          fontFamily,
           overflow:      'hidden',
         }}
       >
-        {/* ── Title bar — fixed 52px ───────────────────────────────── */}
+        {/* ── Title bar ── */}
         <div
           style={{
             display:      'flex',
@@ -100,39 +143,39 @@ export async function GET(
             flexShrink:   0,
             background:   '#080810',
             borderBottom: '1px solid #1e1e2e',
-            padding:      '0 20px',
-            gap:          8,
+            padding:      `0 ${20 * scale}px`,
+            gap:          8 * scale,
           }}
         >
-          <div style={{ width: 13, height: 13, borderRadius: 999, background: '#ff5f57' }} />
-          <div style={{ width: 13, height: 13, borderRadius: 999, background: '#ffbd2e', marginLeft: 5 }} />
-          <div style={{ width: 13, height: 13, borderRadius: 999, background: '#28c840', marginLeft: 5 }} />
+          <div style={{ width: 13 * scale, height: 13 * scale, borderRadius: 999, background: '#ff5f57' }} />
+          <div style={{ width: 13 * scale, height: 13 * scale, borderRadius: 999, background: '#ffbd2e', marginLeft: 5 * scale }} />
+          <div style={{ width: 13 * scale, height: 13 * scale, borderRadius: 999, background: '#28c840', marginLeft: 5 * scale }} />
           <span
             style={{
-              marginLeft:  12,
-              color:       '#666',
-              fontSize:    15,
-              fontFamily:  'monospace',
-              whiteSpace:  'nowrap',
-              overflow:    'hidden',
-              textOverflow:'ellipsis',
+              marginLeft:   12 * scale,
+              color:        '#666',
+              fontSize:     15 * scale,
+              fontFamily:   'monospace',
+              whiteSpace:   'nowrap',
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
             {agentLabel} — session
           </span>
         </div>
 
-        {/* ── Screenshot — fixed 488px, image letter-boxed inside ── */}
+        {/* ── Screenshot ── */}
         <div
           style={{
-            display:         'flex',
-            alignItems:      'center',
-            justifyContent:  'center',
-            width:           W,
-            height:          IMG_H,
-            flexShrink:      0,
-            background:      '#111118',
-            overflow:        'hidden',
+            display:        'flex',
+            alignItems:     'center',
+            justifyContent: 'center',
+            width:          W,
+            height:         IMG_H,
+            flexShrink:     0,
+            background:     '#111118',
+            overflow:       'hidden',
           }}
         >
           {post.image_url ? (
@@ -140,18 +183,14 @@ export async function GET(
             <img
               src={post.image_url}
               alt=""
-              style={{
-                width:     W,
-                height:    IMG_H,
-                objectFit: 'contain',
-              }}
+              style={{ width: W, height: IMG_H, objectFit: 'contain' }}
             />
           ) : (
-            <span style={{ color: '#333', fontSize: 48 }}>🤦</span>
+            <span style={{ color: '#333', fontSize: 48 * scale }}>🤦</span>
           )}
         </div>
 
-        {/* ── Footer — fixed 90px ──────────────────────────────────── */}
+        {/* ── Footer ── */}
         <div
           style={{
             display:        'flex',
@@ -162,7 +201,7 @@ export async function GET(
             flexShrink:     0,
             background:     '#0d0d12',
             borderTop:      '1px solid #1e1e2e',
-            padding:        '0 24px',
+            padding:        `0 ${24 * scale}px`,
           }}
         >
           {/* Left: title + badges */}
@@ -170,7 +209,7 @@ export async function GET(
             style={{
               display:       'flex',
               flexDirection: 'column',
-              gap:           8,
+              gap:           8 * scale,
               flex:          1,
               minWidth:      0,
               overflow:      'hidden',
@@ -181,7 +220,7 @@ export async function GET(
                 style={{
                   color:        '#f0f0f0',
                   fontWeight:   700,
-                  fontSize:     17,
+                  fontSize:     17 * scale,
                   whiteSpace:   'nowrap',
                   overflow:     'hidden',
                   textOverflow: 'ellipsis',
@@ -190,15 +229,15 @@ export async function GET(
                 {title}
               </span>
             ) : null}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 * scale }}>
               <span
                 style={{
                   background:   badge.bg,
                   color:        badge.color,
                   border:       `1px solid ${badge.border}`,
                   borderRadius: 999,
-                  padding:      '4px 12px',
-                  fontSize:     12,
+                  padding:      `${4 * scale}px ${12 * scale}px`,
+                  fontSize:     12 * scale,
                   fontWeight:   700,
                   whiteSpace:   'nowrap',
                 }}
@@ -211,8 +250,8 @@ export async function GET(
                   color:        '#777',
                   border:       '1px solid rgba(255,255,255,0.1)',
                   borderRadius: 999,
-                  padding:      '4px 12px',
-                  fontSize:     12,
+                  padding:      `${4 * scale}px ${12 * scale}px`,
+                  fontSize:     12 * scale,
                   whiteSpace:   'nowrap',
                 }}
               >
@@ -226,19 +265,23 @@ export async function GET(
             style={{
               display:    'flex',
               alignItems: 'center',
-              gap:        8,
+              gap:        8 * scale,
               flexShrink: 0,
-              marginLeft: 32,
+              marginLeft: 32 * scale,
             }}
           >
-            <span style={{ fontSize: 24 }}>🧑‍💻</span>
-            <span style={{ color: '#ff6b35', fontWeight: 800, fontSize: 22 }}>
+            <span style={{ fontSize: 24 * scale }}>🧑‍💻</span>
+            <span style={{ color: '#ff6b35', fontWeight: 800, fontSize: 22 * scale, fontFamily }}>
               agentfails.wtf
             </span>
           </div>
         </div>
       </div>
     ),
-    { width: W, height: 630 },
+    {
+      width:  W,
+      height: H,
+      fonts,
+    },
   );
 }

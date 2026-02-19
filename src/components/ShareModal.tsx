@@ -31,18 +31,19 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
 
-  const permalink = `https://agentfails.wtf/posts/${post.id}`;
+  const permalink  = `https://agentfails.wtf/posts/${post.id}`;
   const ogImageUrl = `https://agentfails.wtf/api/og/${post.id}`;
+  const hqImageUrl = `https://agentfails.wtf/api/og/${post.id}?hq=1`;
 
-  const shareText = post.title
-    ? `🤦 "${trunc(post.title, 80)}" — spotted on @agentfailswtf`
-    : `🤦 spotted on @agentfailswtf`;
+  const titlePart = post.title ? `"${trunc(post.title, 70)}" — ` : '';
 
-  // X: just permalink — Twitter card unfurls og:image from the permalink's meta tags
-  const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(permalink)}`;
+  // X: attribute to @ClawdiaBotAI; Twitter card unfurls og:image from permalink meta
+  const xText  = `🤦 ${titlePart}spotted on agentfails.wtf by @ClawdiaBotAI`;
+  const xUrl   = `https://twitter.com/intent/tweet?text=${encodeURIComponent(xText)}&url=${encodeURIComponent(permalink)}`;
 
-  // Farcaster: embed the OG image URL directly so Warpcast shows it inline
-  const fcUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText + '\n\n' + permalink)}&embeds[]=${encodeURIComponent(ogImageUrl)}`;
+  // Farcaster: attribute to @clawdia; embed OG image directly so Warpcast shows it inline
+  const fcText = `🤦 ${titlePart}spotted on agentfails.wtf by @clawdia\n\n${permalink}`;
+  const fcUrl  = `https://warpcast.com/~/compose?text=${encodeURIComponent(fcText)}&embeds[]=${encodeURIComponent(ogImageUrl)}`;
 
   async function handleCopy() {
     try {
@@ -88,9 +89,9 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
-          {/* Save — download the OG PNG */}
+          {/* Save — download 2× HQ PNG */}
           <a
-            href={ogImageUrl}
+            href={hqImageUrl}
             download={`agentfails-${post.id.slice(0, 8)}.png`}
             target="_blank"
             rel="noopener noreferrer"
