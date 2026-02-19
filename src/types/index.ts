@@ -1,7 +1,10 @@
 export interface Member {
   id: string;
   wallet_address: string;
-  burn_tx_hash: string;
+  /** USDC transfer tx hash (replaces legacy burn_tx_hash) */
+  payment_tx_hash:  string;
+  payment_amount:   string; // "2.00"
+  payment_currency: string; // "USDC"
   created_at: string;
 }
 

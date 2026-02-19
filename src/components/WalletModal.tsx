@@ -3,11 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useClawdiaBalance } from '@/hooks/useClawdiaBalance';
-import { useClawdiaPrice } from '@/hooks/useClawdiaPrice';
 import { useMember } from '@/hooks/useMember';
 import { supabase } from '@/lib/supabase';
-import { CLAWDIA_ADDRESS, CLAWDIA_BURN_ABI, SIGNUP_USD_AMOUNT } from '@/lib/constants';
+import {
+  USDC_ADDRESS,
+  ERC20_TRANSFER_ABI,
+  PAYMENT_COLLECTOR,
+  SIGNUP_USDC_AMOUNT,
+  SIGNUP_USD_AMOUNT,
+} from '@/lib/constants';
 import { showToast } from './Toast';
 
 interface WalletModalProps {
@@ -18,64 +22,60 @@ interface WalletModalProps {
 
 export function WalletModal({ open, onClose, onJoined }: WalletModalProps) {
   const { address, isConnected } = useAccount();
-  const { balance } = useClawdiaBalance(address);
-  const { data: price } = useClawdiaPrice();
   const { member, loading: memberLoading } = useMember(address);
-  const [burning, setBurning] = useState(false);
-  const [burnTxHash, setBurnTxHash] = useState<`0x${string}` | undefined>();
+  const [paying, setPaying] = useState(false);
+  const [payTxHash, setPayTxHash] = useState<`0x${string}` | undefined>();
 
   const { writeContractAsync } = useWriteContract();
-  const { data: receipt } = useWaitForTransactionReceipt({ hash: burnTxHash });
+  const { data: receipt } = useWaitForTransactionReceipt({ hash: payTxHash });
 
-  // Calculate how much CLAWDIA = $2 USD
-  const clawdiaNeeded = price ? BigInt(Math.ceil(SIGNUP_USD_AMOUNT / price)) * (BigInt(10) ** BigInt(18)) : undefined;
-  const balanceSufficient = balance !== undefined && clawdiaNeeded !== undefined && balance >= clawdiaNeeded;
-
-  // Once tx confirmed, register member in Supabase
+  // Once tx confirmed on-chain, verify server-side and register member
   useEffect(() => {
-    if (!receipt || !address || !burnTxHash) return;
+    if (!receipt || !address || !payTxHash) return;
     (async () => {
-      const { error } = await supabase.from('members').insert({
-        wallet_address: address,
-        burn_tx_hash: burnTxHash,
-      });
-      if (error && error.code !== '23505') { // 23505 = unique violation (already a member)
+      try {
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet_address: address, tx_hash: payTxHash }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(`❌ Registration failed: ${data.error ?? 'unknown error'}`);
+          setPaying(false);
+          return;
+        }
+        showToast('🎉 Welcome to the club! Membership active.');
+        setPaying(false);
+        onJoined();
+        onClose();
+      } catch (e) {
         showToast('❌ Registration failed — try again');
-        setBurning(false);
-        return;
+        setPaying(false);
       }
-      showToast('🎉 Welcome to the Wild! Membership active.');
-      setBurning(false);
-      onJoined();
-      onClose();
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipt]);
 
-  async function handleBurnAndJoin() {
-    if (!address || !clawdiaNeeded) return;
-    if (!balanceSufficient) { showToast('❌ Insufficient $CLAWDIA balance'); return; }
+  async function handlePayAndJoin() {
+    if (!address) return;
     try {
-      setBurning(true);
-      // Call burn(uint256) directly on the contract — tokens are destroyed,
-      // not sent to a dead address. Total supply decreases. ✅
+      setPaying(true);
+      // Transfer $2 USDC to the payment collector wallet
       const hash = await writeContractAsync({
-        address: CLAWDIA_ADDRESS,
-        abi: CLAWDIA_BURN_ABI,
-        functionName: 'burn',
-        args: [clawdiaNeeded],
+        address: USDC_ADDRESS,
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [PAYMENT_COLLECTOR, SIGNUP_USDC_AMOUNT],
         chainId: 8453,
       });
-      setBurnTxHash(hash);
-      showToast('⏳ Burning $CLAWDIA… waiting for confirmation');
+      setPayTxHash(hash);
+      showToast('⏳ Payment sent… waiting for confirmation');
     } catch (e: any) {
       showToast('❌ Transaction cancelled');
-      setBurning(false);
+      setPaying(false);
     }
   }
-
-  const clawdiaAmountDisplay = price
-    ? `~${(SIGNUP_USD_AMOUNT / price).toLocaleString(undefined, { maximumFractionDigits: 0 })} $CLAWDIA`
-    : '… $CLAWDIA';
 
   if (!open) return null;
 
@@ -102,54 +102,57 @@ export function WalletModal({ open, onClose, onJoined }: WalletModalProps) {
         ) : member ? (
           <>
             <p className="mb-4 text-sm text-[var(--muted)]">You're already a member — enjoy the chaos 🎉</p>
-            <button className="w-full rounded-lg bg-[var(--accent)] py-3 font-semibold text-white hover:brightness-110 transition-all" onClick={onClose}>
+            <button
+              className="w-full rounded-lg bg-[var(--accent)] py-3 font-semibold text-white hover:brightness-110 transition-all"
+              onClick={onClose}
+            >
               Let's go →
             </button>
           </>
         ) : (
           <>
             <p className="mb-4 text-sm text-[var(--muted)]">
-              Membership costs <strong className="text-[var(--accent)]">${SIGNUP_USD_AMOUNT} USD in $CLAWDIA</strong>, burned forever. No refunds. No regrets.
+              Membership costs <strong className="text-[var(--accent)]">${SIGNUP_USD_AMOUNT} USDC</strong>, one-time.
+              50% buys and burns $CLAWDIA. 50% funds Clawdia's operations.
             </p>
 
-            {/* Gate info */}
+            {/* Payment info */}
             <div className="mb-5 flex items-start gap-3 rounded-xl border border-[oklch(0.72_0.2_25/0.25)] bg-[oklch(0.72_0.2_25/0.08)] p-4">
-              <span className="text-2xl">🪙</span>
+              <span className="text-2xl">💵</span>
               <div className="text-sm">
                 <p>
-                  <strong>$CLAWDIA</strong> on Base
-                  <span className="ml-2 font-mono text-xs text-[var(--muted)]">0xbbd9...2B07</span>
+                  <strong>$2 USDC</strong> on Base
+                  <span className="ml-2 font-mono text-xs text-[var(--muted)]">
+                    {USDC_ADDRESS.slice(0, 6)}…{USDC_ADDRESS.slice(-4)}
+                  </span>
                 </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  Burn amount: <strong className="text-[var(--text)]">{clawdiaAmountDisplay}</strong>
-                  {' '}(${SIGNUP_USD_AMOUNT} at current price)
+                  Payment goes to{' '}
+                  <span className="font-mono">{PAYMENT_COLLECTOR.slice(0, 6)}…{PAYMENT_COLLECTOR.slice(-4)}</span>
                 </p>
-                {balance !== undefined && price && (
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    Your balance: {(Number(balance) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} $CLAWDIA
-                    {' '}{balanceSufficient ? '✅' : '❌ not enough'}
-                  </p>
-                )}
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  50% → 🔥 $CLAWDIA buyback &amp; burn · 50% → ⚙️ operations
+                </p>
               </div>
             </div>
 
             <button
               className="mb-3 w-full rounded-lg bg-[var(--accent)] py-3 font-semibold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleBurnAndJoin}
-              disabled={burning || !balanceSufficient || memberLoading}
+              onClick={handlePayAndJoin}
+              disabled={paying || memberLoading}
             >
-              {burning ? '⏳ Burning & registering…' : `🔥 Burn ${clawdiaAmountDisplay} & Join`}
+              {paying ? '⏳ Paying & registering…' : `💵 Pay $${SIGNUP_USD_AMOUNT} USDC & Join`}
             </button>
 
             <p className="text-center text-xs text-[var(--muted)]">
-              Don't have $CLAWDIA?{' '}
+              Need USDC on Base?{' '}
               <a
-                href={`https://app.uniswap.org/swap?outputCurrency=${CLAWDIA_ADDRESS}&chain=base`}
+                href="https://bridge.base.org"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[var(--accent)] hover:underline"
               >
-                Get some on Uniswap →
+                Bridge at base.org →
               </a>
             </p>
           </>

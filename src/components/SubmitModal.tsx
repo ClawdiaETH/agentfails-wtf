@@ -132,7 +132,7 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
                 <button className="font-semibold text-[var(--accent)] hover:underline" onClick={onNeedSignup}>
                   sign up
                 </button>{' '}
-                (burn $2 in $CLAWDIA) to submit.
+                ($2 USDC one-time) to submit.
               </p>
             </div>
           </div>
