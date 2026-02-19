@@ -67,6 +67,9 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
   const { writeContractAsync } = useWriteContract();
   const { data: payReceipt } = useWaitForTransactionReceipt({ hash: payTxHash });
 
+  // Anons holder free signup state
+  const [joiningAsAnon, setJoiningAsAnon] = useState(false);
+
   useEffect(() => {
     if (!payReceipt || !payTxHash || !pendingImageUrl) return;
     void finalizePost(pendingImageUrl, payTxHash);
@@ -86,6 +89,38 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
     setAgent('openclaw'); setFailType('hallucination');
     setPreviewUrl(null); setFile(null); setAgreed(false);
     setPendingImageUrl(null); setPayTxHash(undefined);
+  }
+
+  async function handleAnonJoin() {
+    if (!address) { showToast('⚠️ Connect your wallet first'); return; }
+    try {
+      setJoiningAsAnon(true);
+      // Check NFT balance first
+      const checkRes = await fetch(`/api/anons-check?wallet=${address}`);
+      const checkData = await checkRes.json();
+      if (!checkRes.ok || !checkData.isHolder) {
+        showToast('❌ No Anons NFT found in this wallet');
+        return;
+      }
+      // Call signup (no tx_hash needed for holders)
+      const signupRes = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: address }),
+      });
+      const signupData = await signupRes.json();
+      if (!signupRes.ok) {
+        showToast(`❌ Join failed: ${signupData.error ?? 'unknown error'}`);
+        return;
+      }
+      showToast('🎉 Welcome! Anons holder — free forever.');
+      onClose();
+      onSubmitted(); // refresh member state in parent
+    } catch {
+      showToast('❌ Something went wrong — try again');
+    } finally {
+      setJoiningAsAnon(false);
+    }
   }
 
   async function handleSubmit() {
@@ -275,6 +310,36 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
               >
                 Sign up for $2 USDC →
               </button>
+
+              {/* Anons holder free-pass callout */}
+              <div className="mt-3 rounded-xl border border-[oklch(0.7_0.15_270/0.35)] bg-[oklch(0.7_0.15_270/0.07)] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--text)]">
+                      Hold an{' '}
+                      <a
+                        href="https://anons.lol"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-dotted hover:text-[var(--accent)] transition-colors"
+                      >
+                        Anon NFT
+                      </a>
+                      ? You&apos;re in free.
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-[var(--muted)]">
+                      Free membership + free posting forever, no USDC required.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleAnonJoin}
+                    disabled={joiningAsAnon}
+                    className="shrink-0 rounded-lg border border-[oklch(0.7_0.15_270/0.4)] bg-[oklch(0.7_0.15_270/0.15)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] hover:bg-[oklch(0.7_0.15_270/0.25)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {joiningAsAnon ? '⏳ Checking…' : 'Join free →'}
+                  </button>
+                </div>
+              </div>
 
               <p className="mt-3 text-center text-[10px] text-[var(--muted)]">
                 Base mainnet · USDC · one-time ·{' '}

@@ -4,16 +4,18 @@
  * PHASE 1 (< 100 posts):
  *   Everyone — humans and agents — must be a member ($2 USDC one-time signup).
  *   Members post for free. No per-post payment.
+ *   Anons NFT holders join for free AND post for free.
  *
  * PHASE 2 (≥ 100 posts):
- *   Members must pay $0.10 USDC per post (x402 pattern).
+ *   Regular members must pay $0.10 USDC per post (x402 pattern).
+ *   Anons NFT holders ALWAYS post for free (re-verified at post time).
  *   1. Hit this endpoint → receive 402 with payment instructions.
  *   2. Send $0.10 USDC on Base to PAYMENT_COLLECTOR.
  *   3. Re-submit with X-Payment: <txHash> header.
  *
  * All posters (human + agent) must be registered members first.
- * To become a member: POST /api/signup with { wallet_address, tx_hash }
- * after sending $2 USDC to PAYMENT_COLLECTOR on Base.
+ * To become a member: POST /api/signup with { wallet_address, tx_hash? }
+ * after sending $2 USDC to PAYMENT_COLLECTOR on Base (not required for Anons holders).
  *
  * Required body fields (JSON):
  *   title        string (required)
@@ -33,6 +35,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
 import { verifyUsdcPayment, buildPaymentRequired } from '@/lib/payments';
 import { POST_USDC_AMOUNT, SIGNUP_USDC_AMOUNT, POST_COUNT_THRESHOLD } from '@/lib/constants';
 
@@ -50,7 +54,43 @@ const FAIL_TYPES = new Set([
   'other',          // fallback
 ]);
 
-// Server-side Supabase client (uses service role key for writes)
+// ── Anons NFT v2 on Base mainnet ─────────────────────────────────────────────
+const ANONS_NFT_V2 = '0x1ad890FCE6cB865737A3411E7d04f1F5668b0686' as const;
+
+const BALANCE_OF_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+async function checkAnonHolder(wallet: string): Promise<boolean> {
+  try {
+    const client = createPublicClient({
+      chain: base,
+      transport: http(
+        process.env.NEXT_PUBLIC_BASE_RPC_URL ??
+        process.env.BASE_RPC_URL ??
+        'https://mainnet.base.org',
+      ),
+    });
+    const balance = await client.readContract({
+      address: ANONS_NFT_V2,
+      abi: BALANCE_OF_ABI,
+      functionName: 'balanceOf',
+      args: [wallet as `0x${string}`],
+    });
+    return Number(balance) > 0;
+  } catch (err) {
+    console.error('[posts] anons NFT check failed:', err);
+    return false; // fail safe → treat as regular member
+  }
+}
+
+// ── Server-side Supabase client (uses service role key for writes) ────────────
 function getSupabaseAdmin() {
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const key  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -94,8 +134,8 @@ export async function POST(req: NextRequest) {
   // ── Membership check (required for everyone) ──────────────────────────────
   const { data: member } = await supabase
     .from('members')
-    .select('id')
-    .eq('wallet_address', submitter_wallet.toLowerCase())
+    .select('id, membership_type')
+    .eq('wallet_address', (submitter_wallet as string).toLowerCase())
     .single();
 
   if (!member) {
@@ -126,6 +166,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── Anons holder check: if membership_type = 'anons_holder', re-verify NFT ─
+  //    (protects against someone who sold their NFT after signing up)
+  let isActiveAnonHolder = false;
+  if (member.membership_type === 'anons_holder') {
+    isActiveAnonHolder = await checkAnonHolder(submitter_wallet);
+    // If they sold the NFT, they fall back to regular paid-member rules.
+    // They still have a valid membership, just no longer free-post in Phase 2.
+  }
+
   // ── Phase check: ≥ POST_COUNT_THRESHOLD posts → require per-post payment ──
   const { count: postCount } = await supabase
     .from('posts')
@@ -133,7 +182,8 @@ export async function POST(req: NextRequest) {
 
   const isPhase2 = (postCount ?? 0) >= POST_COUNT_THRESHOLD;
 
-  if (isPhase2) {
+  // Anons holders who still hold the NFT always skip Phase 2 payments
+  if (isPhase2 && !isActiveAnonHolder) {
     const paymentHeader = req.headers.get('X-Payment') ?? req.headers.get('x-payment');
 
     if (!paymentHeader) {
@@ -190,7 +240,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── Phase 1: member with no post-count threshold reached → free post ───────
+  // ── Free post: Phase 1 OR active Anons holder in Phase 2 ─────────────────
   return insertPost(supabase, {
     title, caption, image_url, source_link, agent_name, fail_type,
     submitter_wallet,

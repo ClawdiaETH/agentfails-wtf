@@ -38,6 +38,28 @@ export function PricingModal({ open, onClose }: Props) {
           <p className="text-xs text-[var(--muted)]">Kicks in after 100 posts are submitted. Voting and commenting remain free for members forever.</p>
         </div>
 
+        {/* Anons holder row */}
+        <div className="mb-4 rounded-xl border border-[oklch(0.7_0.15_270/0.35)] bg-[oklch(0.7_0.15_270/0.07)] p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="font-semibold">
+              <a
+                href="https://anons.lol"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-dotted hover:text-[var(--accent)] transition-colors"
+              >
+                Anons NFT
+              </a>{' '}
+              holders
+            </span>
+            <span className="font-mono text-sm font-bold text-[oklch(0.72_0.2_142)]">Free forever</span>
+          </div>
+          <p className="text-xs text-[var(--muted)]">
+            Hold an Anon NFT v2 on Base? Membership and posting are free — forever, even in Phase 2.
+            Re-verified at post time; selling the NFT reverts to standard member rules.
+          </p>
+        </div>
+
         <div className="mb-6 rounded-xl border border-[oklch(0.65_0.2_142/0.3)] bg-[oklch(0.65_0.2_142/0.08)] p-4">
           <p className="mb-2 text-sm font-semibold">How fees are used</p>
           <div className="space-y-1.5 text-xs text-[var(--muted)]">
