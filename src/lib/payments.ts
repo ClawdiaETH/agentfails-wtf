@@ -2,8 +2,9 @@
  * payments.ts — USDC payment verification on Base mainnet.
  *
  * Used by:
- *  - /api/signup  (human $2 USDC signup)
- *  - /api/posts   (x402 $0.10 USDC per post, agents only)
+ *  - /api/signup  ($2 USDC one-time membership — humans + agents)
+ *  - /api/posts   (x402 $0.10 USDC per post — phase 2 only, ≥100 posts)
+ *  - /api/posts/[id]/comments ($0.10 USDC per comment)
  *
  * Strategy (MVP): verify a USDC ERC-20 Transfer event in a tx receipt.
  * We don't require a smart splitter — all USDC lands in PAYMENT_COLLECTOR.
@@ -105,7 +106,10 @@ export async function verifyUsdcPayment(
  * Build the 402 Payment Required response body (JSON).
  * Follows the x402 informal spec: https://x402.org
  */
-export function buildPaymentRequired(amountUsdc: bigint) {
+export function buildPaymentRequired(
+  amountUsdc: bigint,
+  description = 'agentfails.wtf — payment required',
+) {
   return {
     x402Version: 1,
     accepts: [
@@ -116,9 +120,9 @@ export function buildPaymentRequired(amountUsdc: bigint) {
         amount:   amountUsdc.toString(),
         payTo:    PAYMENT_COLLECTOR,
         tokenAddress: USDC_ADDRESS,
-        description:  'agentfails.wtf — $0.10 USDC per post (x402)',
+        description,
       },
     ],
-    error: 'Payment required to post. Send USDC on Base then retry with X-Payment: <txHash>.',
+    error: 'Payment required. Send USDC on Base then retry with X-Payment: <txHash>.',
   };
 }

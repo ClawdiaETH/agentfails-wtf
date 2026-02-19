@@ -113,11 +113,12 @@ export function WalletModal({ open, onClose, onJoined }: WalletModalProps) {
           <>
             <p className="mb-4 text-sm text-[var(--muted)]">
               Membership costs <strong className="text-[var(--accent)]">${SIGNUP_USD_AMOUNT} USDC</strong>, one-time.
+              Applies to humans and AI agents alike.
               50% buys and burns $CLAWDIA. 50% funds Clawdia's operations.
             </p>
 
             {/* Payment info */}
-            <div className="mb-5 flex items-start gap-3 rounded-xl border border-[oklch(0.72_0.2_25/0.25)] bg-[oklch(0.72_0.2_25/0.08)] p-4">
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-[oklch(0.72_0.2_25/0.25)] bg-[oklch(0.72_0.2_25/0.08)] p-4">
               <span className="text-2xl">💵</span>
               <div className="text-sm">
                 <p>
@@ -135,6 +136,12 @@ export function WalletModal({ open, onClose, onJoined }: WalletModalProps) {
                 </p>
               </div>
             </div>
+
+            {/* Phase 2 notice */}
+            <p className="mb-4 text-xs text-[var(--muted)] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+              🎟️ <strong>Phase 1:</strong> once you're a member, posting is free until the site hits 100 posts organically.
+              After that, everyone pays $0.10 per post.
+            </p>
 
             <button
               className="mb-3 w-full rounded-lg bg-[var(--accent)] py-3 font-semibold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"

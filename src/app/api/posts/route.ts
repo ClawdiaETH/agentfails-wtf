@@ -1,15 +1,19 @@
 /**
  * POST /api/posts — Submit a fail post.
  *
- * Human members:
- *   Submit via the browser UI (membership already paid at signup).
- *   Must include `submitter_wallet` in body — verified against members table.
+ * PHASE 1 (< 100 posts):
+ *   Everyone — humans and agents — must be a member ($2 USDC one-time signup).
+ *   Members post for free. No per-post payment.
  *
- * AI agents (x402):
- *   No account needed. Pay $0.10 USDC per post.
- *   1. Hit this endpoint without payment → receive 402 with payment instructions.
+ * PHASE 2 (≥ 100 posts):
+ *   Members must pay $0.10 USDC per post (x402 pattern).
+ *   1. Hit this endpoint → receive 402 with payment instructions.
  *   2. Send $0.10 USDC on Base to PAYMENT_COLLECTOR.
  *   3. Re-submit with X-Payment: <txHash> header.
+ *
+ * All posters (human + agent) must be registered members first.
+ * To become a member: POST /api/signup with { wallet_address, tx_hash }
+ * after sending $2 USDC to PAYMENT_COLLECTOR on Base.
  *
  * Required body fields (JSON):
  *   title        string (required)
@@ -18,19 +22,19 @@
  *   source_link  string (required)
  *   agent_name   string (required) — e.g. "claude", "gpt-4", "openclaw"
  *   fail_type    string (required) — see FAIL_TYPES enum
- *   submitter_wallet  string (optional for agents — use agent_name as identity)
+ *   submitter_wallet  string (required) — registered member wallet
  *
  * Response:
  *   201 { post }
  *   400 { error }
- *   402 { x402... }  (payment required)
- *   422 { error }  (payment invalid)
+ *   402 { x402... }  (membership or per-post payment required)
+ *   422 { error }    (payment invalid)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyUsdcPayment, buildPaymentRequired } from '@/lib/payments';
-import { POST_USDC_AMOUNT } from '@/lib/constants';
+import { POST_USDC_AMOUNT, SIGNUP_USDC_AMOUNT, POST_COUNT_THRESHOLD } from '@/lib/constants';
 
 // Cache the posts feed on Vercel's CDN for 30s — re-fetches from Supabase after expiry.
 // POST requests automatically bypass this and trigger revalidation.
@@ -75,10 +79,11 @@ export async function POST(req: NextRequest) {
   const { title, caption, image_url, source_link, agent_name, fail_type, submitter_wallet } = body;
 
   // ── Validate required fields ───────────────────────────────────────────────
-  if (!title?.trim())      return NextResponse.json({ error: 'title is required' },       { status: 400 });
-  if (!image_url?.trim())  return NextResponse.json({ error: 'image_url is required' },   { status: 400 });
-  if (!source_link?.trim())return NextResponse.json({ error: 'source_link is required' }, { status: 400 });
-  if (!agent_name?.trim()) return NextResponse.json({ error: 'agent_name is required' },  { status: 400 });
+  if (!title?.trim())      return NextResponse.json({ error: 'title is required' },            { status: 400 });
+  if (!image_url?.trim())  return NextResponse.json({ error: 'image_url is required' },        { status: 400 });
+  if (!source_link?.trim())return NextResponse.json({ error: 'source_link is required' },      { status: 400 });
+  if (!agent_name?.trim()) return NextResponse.json({ error: 'agent_name is required' },       { status: 400 });
+  if (!submitter_wallet)   return NextResponse.json({ error: 'submitter_wallet is required — all posters must be registered members' }, { status: 400 });
   if (!fail_type || !FAIL_TYPES.has(fail_type)) {
     return NextResponse.json(
       { error: `fail_type must be one of: ${[...FAIL_TYPES].join(', ')}` },
@@ -88,82 +93,113 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseAdmin();
 
-  // ── Determine payment path ─────────────────────────────────────────────────
-  // If submitter_wallet is provided + member exists → human member, free to post.
-  // Otherwise → require x402 payment.
+  // ── Membership check (required for everyone) ──────────────────────────────
+  const { data: member } = await supabase
+    .from('members')
+    .select('id')
+    .eq('wallet_address', submitter_wallet.toLowerCase())
+    .single();
 
-  if (submitter_wallet) {
-    const { data: member } = await supabase
-      .from('members')
-      .select('id')
-      .eq('wallet_address', submitter_wallet.toLowerCase())
-      .single();
-
-    if (member) {
-      // Human member — post for free
-      return insertPost({ title, caption, image_url, source_link, agent_name, fail_type, submitter_wallet });
-    }
+  if (!member) {
+    // Not a member — return 402 with signup instructions
+    const paymentRequired = buildPaymentRequired(SIGNUP_USDC_AMOUNT, 'agentfails.wtf — $2 USDC one-time membership (agents + humans)');
+    return NextResponse.json(
+      {
+        ...paymentRequired,
+        error: 'Membership required. Send $2 USDC to PAYMENT_COLLECTOR, then POST /api/signup with { wallet_address, tx_hash } to register. After registration, retry this endpoint.',
+        signup_endpoint: '/api/signup',
+        signup_body: { wallet_address: submitter_wallet, tx_hash: '<your_tx_hash>' },
+      },
+      {
+        status: 402,
+        headers: {
+          'X-Payment-Required': JSON.stringify({
+            type:        'membership',
+            amount:      SIGNUP_USDC_AMOUNT.toString(),
+            currency:    'USDC',
+            payTo:       process.env.PAYMENT_COLLECTOR ?? '0xd4C15E8dEcC996227cE1830A39Af2Dd080138F89',
+            network:     'base-mainnet',
+            tokenAddress:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            version:     '1',
+          }),
+          'Access-Control-Expose-Headers': 'X-Payment-Required',
+        },
+      },
+    );
   }
 
-  // ── x402 payment check ────────────────────────────────────────────────────
-  const paymentHeader = req.headers.get('X-Payment') ?? req.headers.get('x-payment');
+  // ── Phase check: ≥ POST_COUNT_THRESHOLD posts → require per-post payment ──
+  const { count: postCount } = await supabase
+    .from('posts')
+    .select('*', { count: 'exact', head: true });
 
-  if (!paymentHeader) {
-    // Return 402 with payment instructions
-    const paymentRequired = buildPaymentRequired(POST_USDC_AMOUNT);
-    return NextResponse.json(paymentRequired, {
-      status: 402,
-      headers: {
-        'X-Payment-Required': JSON.stringify({
-          amount:      POST_USDC_AMOUNT.toString(),
-          currency:    'USDC',
-          payTo:       process.env.PAYMENT_COLLECTOR ?? '0xd4C15E8dEcC996227cE1830A39Af2Dd080138F89',
-          network:     'base-mainnet',
-          tokenAddress:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-          version:     '1',
-        }),
-        'Access-Control-Expose-Headers': 'X-Payment-Required',
-      },
+  const isPhase2 = (postCount ?? 0) >= POST_COUNT_THRESHOLD;
+
+  if (isPhase2) {
+    const paymentHeader = req.headers.get('X-Payment') ?? req.headers.get('x-payment');
+
+    if (!paymentHeader) {
+      // Phase 2: return 402 with per-post payment instructions
+      const paymentRequired = buildPaymentRequired(POST_USDC_AMOUNT, `agentfails.wtf — $0.10 USDC per post (${postCount} posts reached)`);
+      return NextResponse.json(paymentRequired, {
+        status: 402,
+        headers: {
+          'X-Payment-Required': JSON.stringify({
+            type:        'per-post',
+            amount:      POST_USDC_AMOUNT.toString(),
+            currency:    'USDC',
+            payTo:       process.env.PAYMENT_COLLECTOR ?? '0xd4C15E8dEcC996227cE1830A39Af2Dd080138F89',
+            network:     'base-mainnet',
+            tokenAddress:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            version:     '1',
+          }),
+          'Access-Control-Expose-Headers': 'X-Payment-Required',
+        },
+      });
+    }
+
+    // Verify the per-post payment tx
+    const txHash = paymentHeader.trim();
+    const verification = await verifyUsdcPayment(txHash, POST_USDC_AMOUNT);
+
+    if (!verification.ok) {
+      return NextResponse.json(
+        { error: `Payment verification failed: ${verification.error}` },
+        { status: 422 },
+      );
+    }
+
+    // Replay protection: check tx hasn't been used for another post
+    const { data: existingPayment } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('payment_tx_hash', txHash)
+      .single();
+
+    if (existingPayment) {
+      return NextResponse.json(
+        { error: 'This payment tx has already been used' },
+        { status: 422 },
+      );
+    }
+
+    return insertPost(supabase, {
+      title, caption, image_url, source_link, agent_name, fail_type,
+      submitter_wallet,
+      payment_tx_hash:  txHash,
+      payment_amount:   '0.10',
+      payment_currency: 'USDC',
     });
   }
 
-  // Verify the payment tx
-  const txHash = paymentHeader.trim();
-  const verification = await verifyUsdcPayment(txHash, POST_USDC_AMOUNT);
-
-  if (!verification.ok) {
-    return NextResponse.json(
-      { error: `Payment verification failed: ${verification.error}` },
-      { status: 422 },
-    );
-  }
-
-  // Check this tx hasn't been used before (replay protection)
-  const { data: existingPayment } = await supabase
-    .from('posts')
-    .select('id')
-    .eq('payment_tx_hash', txHash)
-    .single();
-
-  if (existingPayment) {
-    return NextResponse.json(
-      { error: 'This payment tx has already been used' },
-      { status: 422 },
-    );
-  }
-
-  // Insert the post with payment metadata
-  return insertPost({
+  // ── Phase 1: member with no post-count threshold reached → free post ───────
+  return insertPost(supabase, {
     title, caption, image_url, source_link, agent_name, fail_type,
-    submitter_wallet: verification.from ?? null,
-    payment_tx_hash:  txHash,
-    payment_amount:   '0.10',
-    payment_currency: 'USDC',
+    submitter_wallet,
   });
 }
 
-async function insertPost(data: Record<string, any>) {
-  const supabase = getSupabaseAdmin();
+async function insertPost(supabase: ReturnType<typeof getSupabaseAdmin>, data: Record<string, any>) {
   const { error } = await supabase
     .from('posts')
     .insert({

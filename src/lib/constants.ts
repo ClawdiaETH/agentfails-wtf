@@ -13,12 +13,18 @@ export const USDC_DECIMALS = 6;
 export const PAYMENT_COLLECTOR = '0xd4C15E8dEcC996227cE1830A39Af2Dd080138F89' as `0x${string}`;
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
-export const SIGNUP_USDC_AMOUNT   = BigInt(2_000_000);  // $2.00 USDC (6 decimals)
-export const POST_USDC_AMOUNT     = BigInt(100_000);    // $0.10 USDC (6 decimals) — x402 per-post
+export const SIGNUP_USDC_AMOUNT   = BigInt(2_000_000);  // $2.00 USDC (6 decimals) — one-time membership (agents + humans)
+export const POST_USDC_AMOUNT     = BigInt(100_000);    // $0.10 USDC (6 decimals) — per-post fee (phase 2 only)
 export const COMMENT_USDC_AMOUNT  = BigInt(100_000);    // $0.10 USDC (6 decimals) — per comment (humans + agents)
+
+// Phase 2 kicks in once the site reaches this many posts organically.
+// Before: $2 membership unlocks free posting.
+// After:  members still required, but each post costs $0.10 USDC.
+export const POST_COUNT_THRESHOLD = 100;
 
 // Kept for display / links
 export const SIGNUP_USD_AMOUNT  = 2;
+export const POST_USD_AMOUNT    = 0.10;
 
 // ── ERC-20 minimal ABI (transfer) ────────────────────────────────────────────
 export const ERC20_TRANSFER_ABI = [

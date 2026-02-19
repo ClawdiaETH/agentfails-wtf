@@ -1,9 +1,18 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useRef, useState, useEffect } from 'react';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { supabase } from '@/lib/supabase';
 import { useMember } from '@/hooks/useMember';
+import { usePostCount } from '@/hooks/usePostCount';
+import {
+  USDC_ADDRESS,
+  ERC20_TRANSFER_ABI,
+  PAYMENT_COLLECTOR,
+  POST_USDC_AMOUNT,
+  POST_COUNT_THRESHOLD,
+  POST_USD_AMOUNT,
+} from '@/lib/constants';
 import { showToast } from './Toast';
 
 interface SubmitModalProps {
@@ -34,7 +43,10 @@ const FAIL_TYPES = [
 export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: SubmitModalProps) {
   const { address } = useAccount();
   const { member } = useMember(address);
+  const { data: postCount = 0 } = usePostCount();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isPhase2 = postCount >= POST_COUNT_THRESHOLD;
 
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
@@ -45,6 +57,19 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
   const [file, setFile] = useState<File | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Phase 2: payment state
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [payTxHash, setPayTxHash] = useState<`0x${string}` | undefined>();
+  const { writeContractAsync } = useWriteContract();
+  const { data: payReceipt } = useWaitForTransactionReceipt({ hash: payTxHash });
+
+  // Once phase-2 payment confirms, finish the post insert
+  useEffect(() => {
+    if (!payReceipt || !payTxHash || !pendingImageUrl) return;
+    void finalizePost(pendingImageUrl, payTxHash);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payReceipt]);
 
   function handleFileChange(f: File | null) {
     if (!f) return;
@@ -58,20 +83,21 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
     setTitle(''); setCaption(''); setSourceLink('');
     setAgent('openclaw'); setFailType('hallucination');
     setPreviewUrl(null); setFile(null); setAgreed(false);
+    setPendingImageUrl(null); setPayTxHash(undefined);
   }
 
   async function handleSubmit() {
     if (!address || !member) { onNeedSignup(); return; }
-    if (!title.trim()) { showToast('⚠️ Add a title'); return; }
-    if (!file) { showToast('⚠️ Upload a screenshot'); return; }
-    if (!sourceLink.trim()) { showToast('⚠️ Add a source link'); return; }
-    if (!agreed) { showToast('⚠️ Check the confirmation box'); return; }
+    if (!title.trim())       { showToast('⚠️ Add a title');               return; }
+    if (!file)               { showToast('⚠️ Upload a screenshot');        return; }
+    if (!sourceLink.trim())  { showToast('⚠️ Add a source link');          return; }
+    if (!agreed)             { showToast('⚠️ Check the confirmation box'); return; }
 
     try {
       setSubmitting(true);
 
-      // Upload image to Supabase Storage
-      const ext = file.name.split('.').pop() ?? 'png';
+      // 1️⃣ Upload image to Supabase Storage
+      const ext  = file.name.split('.').pop() ?? 'png';
       const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadErr } = await supabase.storage
         .from('screenshots')
@@ -79,19 +105,60 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
       if (uploadErr) throw uploadErr;
 
       const { data: urlData } = supabase.storage.from('screenshots').getPublicUrl(path);
+      const imageUrl = urlData.publicUrl;
 
-      // Insert post
-      const { error: insertErr } = await supabase.from('posts').insert({
-        title: title.trim(),
-        caption: caption.trim() || null,
-        image_url: urlData.publicUrl,
-        source_link: sourceLink.trim(),
-        agent,
-        fail_type: failType,
-        submitter_wallet: address,
-        upvote_count: 0,
+      if (isPhase2) {
+        // 2️⃣ Phase 2: pay $0.10 USDC first, then post (handled in useEffect)
+        showToast(`⏳ Phase 2: paying $${POST_USD_AMOUNT} USDC…`);
+        setPendingImageUrl(imageUrl);
+        const hash = await writeContractAsync({
+          address:      USDC_ADDRESS,
+          abi:          ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args:         [PAYMENT_COLLECTOR, POST_USDC_AMOUNT],
+          chainId:      8453,
+        });
+        setPayTxHash(hash);
+        showToast('⏳ Payment sent — waiting for confirmation…');
+        // finalizePost() will be called from useEffect once receipt arrives
+      } else {
+        // 2️⃣ Phase 1: free for members
+        await finalizePost(imageUrl, null);
+      }
+    } catch (e: any) {
+      console.error(e);
+      if (e?.message?.includes('User rejected') || e?.message?.includes('user rejected')) {
+        showToast('❌ Payment cancelled');
+      } else {
+        showToast('❌ Submit failed — try again');
+      }
+      setSubmitting(false);
+    }
+  }
+
+  async function finalizePost(imageUrl: string, paymentTxHash: string | null) {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (paymentTxHash) headers['X-Payment'] = paymentTxHash;
+
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          title:            title.trim(),
+          caption:          caption.trim() || null,
+          image_url:        imageUrl,
+          source_link:      sourceLink.trim(),
+          agent_name:       agent,
+          fail_type:        failType,
+          submitter_wallet: address,
+        }),
       });
-      if (insertErr) throw insertErr;
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
 
       showToast('🔥 Submitted! The AI should be ashamed.');
       reset();
@@ -99,13 +166,18 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
       onSubmitted();
     } catch (e: any) {
       console.error(e);
-      showToast('❌ Submit failed — try again');
+      showToast(`❌ Submit failed: ${e.message ?? 'unknown error'}`);
     } finally {
       setSubmitting(false);
     }
   }
 
   if (!open) return null;
+
+  const postsLeft = Math.max(0, POST_COUNT_THRESHOLD - postCount);
+  const phaseBadge = isPhase2
+    ? `Phase 2 — $${POST_USD_AMOUNT} per post`
+    : `Phase 1 — free to post · ${postsLeft} posts left until $${POST_USD_AMOUNT}/post kicks in`;
 
   return (
     <div
@@ -119,9 +191,16 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
         >✕</button>
 
         <h2 className="mb-1 text-xl font-bold">Submit an AI Fail 🤦</h2>
-        <p className="mb-5 text-sm text-[var(--muted)]">
+        <p className="mb-2 text-sm text-[var(--muted)]">
           Caught an agent hallucinating, looping, or just completely unhinged? We need this.
         </p>
+
+        {/* Phase indicator */}
+        {address && member && (
+          <p className="mb-4 text-xs text-[var(--muted)] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+            {isPhase2 ? '💸' : '🎟️'} {phaseBadge}
+          </p>
+        )}
 
         {/* Gate: must be a member */}
         {!address || !member ? (
@@ -133,7 +212,10 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
                 <button className="font-semibold text-[var(--accent)] hover:underline" onClick={onNeedSignup}>
                   sign up
                 </button>{' '}
-                ($2 USDC one-time) to submit.
+                ($2 USDC one-time) to submit — applies to humans and agents alike.
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Once the site hits {POST_COUNT_THRESHOLD} posts, it'll cost ${POST_USD_AMOUNT} per post for everyone.
               </p>
             </div>
           </div>
@@ -191,7 +273,7 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
           <div className="mb-4">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
               Source link <span className="text-[var(--accent)]">*</span>
-              <span className="ml-1 font-normal normal-case text-[var(--muted)]">— link to the original convo so others can verify</span>
+              <span className="ml-1 font-normal normal-case text-[var(--muted)]">— link to original convo so others can verify</span>
             </label>
             <input
               type="url"
@@ -266,7 +348,11 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
               disabled={submitting}
               className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? '⏳ Posting…' : '🔥 Post it'}
+              {submitting
+                ? (isPhase2 && payTxHash && !payReceipt ? '⏳ Confirming payment…' : '⏳ Posting…')
+                : isPhase2
+                ? `🔥 Pay $${POST_USD_AMOUNT} & Post`
+                : '🔥 Post it'}
             </button>
           </div>
         </fieldset>
