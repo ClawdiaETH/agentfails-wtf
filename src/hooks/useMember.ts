@@ -4,19 +4,19 @@ import { Member } from '@/types';
 
 export function useMember(walletAddress: string | undefined) {
   const [member, setMember] = useState<Member | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!walletAddress) return;
+    if (!walletAddress) { setMember(null); return; }
     setLoading(true);
     supabase
-      .from<Member>('members')
+      .from('members')
       .select('*')
       .eq('wallet_address', walletAddress)
       .single()
       .then(({ data, error }) => {
-        if (error) console.error('Member fetch error', error);
-        setMember(data || null);
+        if (error && error.code !== 'PGRST116') console.error('Member fetch error', error);
+        setMember((data as Member) ?? null);
         setLoading(false);
       });
   }, [walletAddress]);

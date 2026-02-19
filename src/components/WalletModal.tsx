@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseUnits } from 'viem';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useClawdiaBalance } from '@/hooks/useClawdiaBalance';
 import { useClawdiaPrice } from '@/hooks/useClawdiaPrice';
@@ -29,7 +28,7 @@ export function WalletModal({ open, onClose, onJoined }: WalletModalProps) {
   const { data: receipt } = useWaitForTransactionReceipt({ hash: burnTxHash });
 
   // Calculate how much CLAWDIA = $2 USD
-  const clawdiaNeeded = price ? BigInt(Math.ceil((SIGNUP_USD_AMOUNT / price))) * BigInt(10 ** 18) : undefined;
+  const clawdiaNeeded = price ? BigInt(Math.ceil(SIGNUP_USD_AMOUNT / price)) * (BigInt(10) ** BigInt(18)) : undefined;
   const balanceSufficient = balance !== undefined && clawdiaNeeded !== undefined && balance >= clawdiaNeeded;
 
   // Once tx confirmed, register member in Supabase

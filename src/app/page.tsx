@@ -34,15 +34,12 @@ export default function Home() {
   function handleSubmitted() {
     // Switch to New tab and refetch
     setActiveTab('new');
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
+    void queryClient.invalidateQueries({ queryKey: ['posts'] });
   }
 
   return (
     <>
-      <Header
-        onOpenSubmit={handleSubmitClick}
-        onOpenWallet={() => setWalletModalOpen(true)}
-      />
+      <Header onOpenSubmit={handleSubmitClick} />
 
       <nav>
         <TabBar activeTab={activeTab} onChange={setActiveTab} />
