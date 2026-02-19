@@ -10,6 +10,7 @@ import { PostFeed } from '@/components/PostFeed';
 import { WalletModal } from '@/components/WalletModal';
 import { SubmitModal } from '@/components/SubmitModal';
 import { SiteFooter } from '@/components/SiteFooter';
+import { FacepalmConfetti } from '@/components/Confetti';
 import { Toast } from '@/components/Toast';
 import { Tab } from '@/hooks/usePosts';
 
@@ -24,6 +25,7 @@ function HomeContent() {
   const [activeTab, setActiveTab]       = useState<Tab>(initialTab);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  const [confetti, setConfetti] = useState(false);
 
   function handleSubmitClick() { setSubmitModalOpen(true); }
 
@@ -33,7 +35,10 @@ function HomeContent() {
   }
 
   function handleJoined() {
-    setSubmitModalOpen(true);
+    // Close everything — show confetti, let the user choose what to do next
+    setWalletModalOpen(false);
+    setSubmitModalOpen(false);
+    setConfetti(true);
   }
 
   function handleSubmitted() {
@@ -68,6 +73,8 @@ function HomeContent() {
         onSubmitted={handleSubmitted}
         onNeedSignup={handleNeedSignup}
       />
+
+      {confetti && <FacepalmConfetti onDone={() => setConfetti(false)} />}
 
       <Toast />
     </>

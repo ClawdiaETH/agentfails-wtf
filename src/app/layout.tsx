@@ -18,6 +18,7 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://agentfails.wtf'),
   title: 'AgentFails.wtf',
   description: 'The internet\'s hall of shame for AI agent fails, hallucinations, and unhinged moments. $CLAWDIA token-gated on Base.',
   icons: {
