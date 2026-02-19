@@ -124,7 +124,6 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
 
   const permalink  = `https://agentfails.wtf/posts/${post.id}`;
   const ogImageUrl = `https://agentfails.wtf/api/og/${post.id}`;
-  const hqImageUrl = `https://agentfails.wtf/api/og/${post.id}?hq=1`;
 
   const shareTitle = post.title ? `"${trunc(post.title, 70)}" — ` : '';
 
@@ -197,9 +196,9 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
-          {/* Save HQ PNG */}
+          {/* Save PNG (1200×630) */}
           <a
-            href={hqImageUrl}
+            href={ogImageUrl}
             download={`agentfails-${post.id.slice(0, 8)}.png`}
             target="_blank"
             rel="noopener noreferrer"

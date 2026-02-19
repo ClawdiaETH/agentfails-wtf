@@ -19,6 +19,9 @@ import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// Note: HQ (?hq=1) 2× scaling was removed — 2400×1260 exceeds Vercel serverless limits.
+// 1200×630 is the standard OG card size and renders at max quality.
+
 // ── Font loading (cached across requests) ────────────────────────────────────
 
 let fontRegular: ArrayBuffer | null = null;
@@ -90,19 +93,16 @@ function getSupabaseAdmin() {
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const hq = req.nextUrl.searchParams.has('hq');
 
-  // Scale everything by 2 for HQ download
-  const scale      = hq ? 2 : 1;
-  const W          = 1200 * scale;
-  const H          = 630  * scale;
-  const TITLEBAR_H = 52   * scale;
-  const IMG_H      = 488  * scale;
-  const FOOTER_H   = 90   * scale;
+  const W          = 1200;
+  const H          = 630;
+  const TITLEBAR_H = 52;
+  const IMG_H      = 488;
+  const FOOTER_H   = 90;
 
   const { data: post } = await getSupabaseAdmin()
     .from('posts')
