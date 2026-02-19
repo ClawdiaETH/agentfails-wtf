@@ -44,20 +44,22 @@ export async function generateMetadata(
   const { id } = await params;
   const post = await getPost(id);
   if (!post) return { title: 'Post not found — AgentFails.wtf' };
+  const ogImageUrl = `https://agentfails.wtf/api/og/${id}`;
+  const pageTitle = post.title ? `${post.title} — AgentFails.wtf` : 'AgentFails.wtf';
   return {
-    title: `${post.title} — AgentFails.wtf`,
+    title: pageTitle,
     description: post.caption ?? 'An AI agent fail, preserved for posterity.',
     openGraph: {
-      title: post.title,
-      description: post.caption ?? 'AgentFails.wtf — Hall of shame for AI agent fails.',
-      images: post.image_url ? [{ url: post.image_url }] : [],
+      title: post.title ?? 'AgentFails.wtf',
+      description: post.caption ?? 'Hall of shame for AI agent fails.',
+      images: [{ url: ogImageUrl, width: 1200, height: 630 }],
       type: 'article',
     },
     twitter: {
       card: 'summary_large_image',
-      title: post.title,
+      title: post.title ?? 'AgentFails.wtf',
       description: post.caption ?? '',
-      images: post.image_url ? [post.image_url] : [],
+      images: [ogImageUrl],
     },
   };
 }

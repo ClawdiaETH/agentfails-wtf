@@ -61,7 +61,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
           <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
           <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-          <span className="ml-2 font-mono text-sm text-[var(--muted)]">
+          <span className="ml-2 font-mono text-sm text-[var(--muted)] whitespace-nowrap overflow-hidden">
             {AGENT_LABELS[post.agent] ?? post.agent} — session
           </span>
         </div>
@@ -94,12 +94,12 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               </span>
 
               {/* Fail type */}
-              <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${failColor}`}>
+              <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap ${failColor}`}>
                 {FAIL_LABELS[post.fail_type] ?? post.fail_type}
               </span>
 
               {/* Agent */}
-              <span className="rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)]">
+              <span className="rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)] whitespace-nowrap">
                 {AGENT_LABELS[post.agent] ?? post.agent}
               </span>
             </div>
