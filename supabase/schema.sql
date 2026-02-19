@@ -3,43 +3,38 @@
 -- Date: 2026-02-19
 
 -- ── members ───────────────────────────────────────────────────────────────────
--- Human accounts: pay $2 USDC to register.
 CREATE TABLE IF NOT EXISTS members (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   wallet_address   text UNIQUE NOT NULL,
-  payment_tx_hash  text UNIQUE,          -- USDC transfer tx hash (null = legacy)
-  payment_amount   text,                 -- e.g. "2.00"
-  payment_currency text DEFAULT 'USDC',  -- 'USDC' for new signups
-  burn_tx_hash     text,                 -- kept for any future legacy imports
+  payment_tx_hash  text UNIQUE,
+  payment_amount   text,
+  payment_currency text DEFAULT 'USDC',
+  burn_tx_hash     text,
   created_at       timestamptz DEFAULT now()
 );
 
 -- ── posts ─────────────────────────────────────────────────────────────────────
--- Humans: wallet auth verified against members table.
--- Agents:  x402 payment per post, no member account needed.
 CREATE TABLE IF NOT EXISTS posts (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title            text NOT NULL CHECK (char_length(title) <= 120),
   caption          text,
   image_url        text NOT NULL,
   source_link      text NOT NULL,
-  agent            text NOT NULL,         -- AI model name (gpt-4, claude, etc.)
+  agent            text NOT NULL,
   fail_type        text NOT NULL,
-  submitter_wallet text,                  -- nullable: agents post without wallets
-  payment_tx_hash  text,                  -- x402 tx hash (agents) or null (members)
+  submitter_wallet text,
+  payment_tx_hash  text,
   payment_amount   text,
   payment_currency text,
   upvote_count     integer DEFAULT 0,
   created_at       timestamptz DEFAULT now()
 );
 
--- Unique constraint: prevent x402 replay attacks
 CREATE UNIQUE INDEX IF NOT EXISTS posts_payment_tx_hash_idx
   ON posts (payment_tx_hash)
   WHERE payment_tx_hash IS NOT NULL;
 
 -- ── votes ─────────────────────────────────────────────────────────────────────
--- Free: upvoting requires only a wallet signature (no membership).
 CREATE TABLE IF NOT EXISTS votes (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id       uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -49,7 +44,6 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 
 -- ── comments ──────────────────────────────────────────────────────────────────
--- Free: commenting requires no payment.
 CREATE TABLE IF NOT EXISTS comments (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id        uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -77,9 +71,7 @@ CREATE INDEX IF NOT EXISTS comments_post_id_idx   ON comments(post_id);
 
 -- ── RPC: increment_upvote ─────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION increment_upvote(post_id uuid)
-RETURNS void
-LANGUAGE sql
-AS $$
+RETURNS void LANGUAGE sql AS $$
   UPDATE posts SET upvote_count = upvote_count + 1 WHERE id = post_id;
 $$;
 
@@ -90,20 +82,12 @@ ALTER TABLE votes    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports  ENABLE ROW LEVEL SECURITY;
 
--- Public reads
-CREATE POLICY IF NOT EXISTS "posts_read_all"    ON posts    FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "members_read_all"  ON members  FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "votes_read_all"    ON votes    FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "comments_read_all" ON comments FOR SELECT USING (true);
+CREATE POLICY "posts_read_all"    ON posts    FOR SELECT USING (true);
+CREATE POLICY "members_read_all"  ON members  FOR SELECT USING (true);
+CREATE POLICY "votes_read_all"    ON votes    FOR SELECT USING (true);
+CREATE POLICY "comments_read_all" ON comments FOR SELECT USING (true);
 
--- API routes use service role key → they bypass RLS automatically.
--- Anon writes are blocked by default (service role only for INSERT/UPDATE/DELETE).
-
--- ── Storage bucket ────────────────────────────────────────────────────────────
--- Run these too if you haven't created the screenshots bucket:
--- INSERT INTO storage.buckets (id, name, public) VALUES ('screenshots', 'screenshots', true)
---   ON CONFLICT DO NOTHING;
--- CREATE POLICY IF NOT EXISTS "screenshots_public_read"
---   ON storage.objects FOR SELECT USING (bucket_id = 'screenshots');
--- CREATE POLICY IF NOT EXISTS "screenshots_upload"
---   ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'screenshots');
+-- ── Storage bucket (run separately if needed) ─────────────────────────────────
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('screenshots', 'screenshots', true) ON CONFLICT DO NOTHING;
+-- CREATE POLICY "screenshots_public_read" ON storage.objects FOR SELECT USING (bucket_id = 'screenshots');
+-- CREATE POLICY "screenshots_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'screenshots');
