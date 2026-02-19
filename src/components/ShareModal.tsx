@@ -135,15 +135,10 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
   const fcText = `🤦 ${shareTitle}spotted on agentfails.wtf by @clawdia\n\n${permalink}`;
   const fcUrl  = `https://warpcast.com/~/compose?text=${encodeURIComponent(fcText)}&embeds[]=${encodeURIComponent(ogImageUrl)}`;
 
-  // Pre-fetch OG image in background as soon as modal opens
+  // Reset ogReady when modal closes
   useEffect(() => {
-    if (!open) { setOgReady(false); return; }
-    const img = new Image();
-    img.src = ogImageUrl;
-    img.onload = () => setOgReady(true);
-    // If OG endpoint errors, we still have the quick preview — don't crash
-    img.onerror = () => setOgReady(false);
-  }, [open, ogImageUrl]);
+    if (!open) { setOgReady(false); }
+  }, [open]);
 
   async function handleCopy() {
     try {
@@ -176,22 +171,17 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
 
         <h2 className="mb-4 text-base font-bold">Share this fail ↗</h2>
 
-        {/* Preview area — instant QuickPreview → OG image crossfade */}
-        <div className="mb-4 relative">
-          {/* OG image — absolutely overlaid, fades in when ready */}
-          <div className={`transition-opacity duration-500 ${ogReady ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={ogImageUrl}
-              alt="Share card"
-              className="w-full rounded-xl border border-[var(--border)]"
-            />
-          </div>
-
-          {/* Quick preview — shown instantly, fades out when OG is ready */}
-          <div className={`transition-opacity duration-500 ${ogReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-            <QuickPreview post={post} />
-          </div>
+        {/* Preview area — QuickPreview until OG image loads, then swap */}
+        <div className="mb-4">
+          {!ogReady && <QuickPreview post={post} />}
+          {/* Hidden img that preloads; shown when ready */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={ogImageUrl}
+            alt="Share card"
+            className={`w-full rounded-xl border border-[var(--border)] transition-opacity duration-300 ${ogReady ? 'opacity-100 block' : 'opacity-0 hidden'}`}
+            onLoad={() => setOgReady(true)}
+          />
         </div>
 
         {/* Action buttons */}

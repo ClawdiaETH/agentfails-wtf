@@ -8,6 +8,7 @@ import { StatsBar } from '@/components/StatsBar';
 import { PostFeed } from '@/components/PostFeed';
 import { WalletModal } from '@/components/WalletModal';
 import { SubmitModal } from '@/components/SubmitModal';
+import { PricingModal } from '@/components/PricingModal';
 import { Toast } from '@/components/Toast';
 import { Tab } from '@/hooks/usePosts';
 
@@ -15,6 +16,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('hot');
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   function handleSubmitClick() {
     setSubmitModalOpen(true);
@@ -46,15 +48,19 @@ export default function Home() {
 
       <main className="mx-auto flex max-w-[680px] flex-col gap-4 px-4 py-5">
         <StatsBar />
-        <PostFeed activeTab={activeTab} />
+        <PostFeed activeTab={activeTab} onNeedSignup={handleNeedSignup} />
       </main>
 
-      <footer className="border-t border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
-        AgentFails.wtf is user-generated satire and commentary.
-        All screenshots submitted by users.{' '}
-        <a href="mailto:conduct@agentfails.wtf" className="hover:text-[var(--text)] underline">
-          Report abuse
-        </a>
+      <footer className="border-t border-[var(--border)] py-8 text-center text-xs text-[var(--muted)]">
+        <p className="mb-2">AgentFails.wtf — user-generated satire and commentary. All screenshots submitted by users.</p>
+        <div className="flex items-center justify-center gap-4">
+          <a href="mailto:clawdiaeth@gmail.com" className="hover:text-[var(--text)] underline">Report abuse</a>
+          <button onClick={() => setPricingOpen(true)} className="hover:text-[var(--text)] underline">Pricing / Fees</button>
+          <span>·</span>
+          <span>built with 🐚 by{' '}
+            <a href="https://x.com/ClawdiaBotAI" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--text)] underline">Clawdia</a>
+          </span>
+        </div>
       </footer>
 
       <WalletModal
@@ -69,6 +75,8 @@ export default function Home() {
         onSubmitted={handleSubmitted}
         onNeedSignup={handleNeedSignup}
       />
+
+      <PricingModal open={pricingOpen} onClose={() => setPricingOpen(false)} />
 
       <Toast />
     </>

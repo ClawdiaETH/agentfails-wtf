@@ -1,11 +1,11 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Post } from '@/types';
 import { truncateAddress, timeAgo, formatUpvotes } from '@/lib/utils';
 import { ReportButton } from './ReportButton';
 import { ShareModal } from './ShareModal';
-import { showToast } from './Toast';
 
 const AGENT_LABELS: Record<string, string> = {
   openclaw: '🦞 OpenClaw',
@@ -40,9 +40,11 @@ interface PostCardProps {
   onVote: (postId: string) => void;
   walletAddress: string | undefined;
   rank?: number;
+  onNeedSignup?: () => void;
 }
 
-export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardProps) {
+export function PostCard({ post, voted, onVote, walletAddress, rank, onNeedSignup }: PostCardProps) {
+  const router = useRouter();
   const [localCount, setLocalCount] = useState(post.upvote_count);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -52,13 +54,13 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
   const lastTapRef = useRef<number>(0);
 
   function handleVote() {
-    if (!walletAddress) { showToast('🔗 Connect wallet to vote'); return; }
+    if (!walletAddress) { onNeedSignup?.(); return; }
     // Optimistic count update — parent's voted prop will reflect truth after API settles
     setLocalCount(c => Math.max(0, c + (voted ? -1 : 1)));
     onVote(post.id);
   }
 
-  function handleImageTap() {
+  function handleImageClick(e: React.MouseEvent) {
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
       // double-tap = add vote only (heart animation on add, not on remove)
@@ -67,6 +69,15 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
         setHeartVisible(true);
         setTimeout(() => setHeartVisible(false), 700);
       }
+    } else {
+      // single click → navigate to permalink (after short delay to allow double-tap detection)
+      // We use a timeout so a double-click doesn't navigate
+      const tapTime = now;
+      setTimeout(() => {
+        if (Date.now() - tapTime >= 340) {
+          router.push(`/posts/${post.id}`);
+        }
+      }, 360);
     }
     lastTapRef.current = now;
   }
@@ -78,12 +89,13 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
     <article className="relative overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] transition-all duration-200 hover:border-[oklch(0.3_0.02_260)] hover:shadow-lg">
 
       {/* ── Faux-macOS chrome ── */}
-      <div
-        className="relative cursor-pointer select-none"
-        onClick={handleImageTap}
-      >
-        {/* Title bar */}
-        <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[oklch(0.08_0.01_260)] px-3 py-2">
+      <div className="relative">
+        {/* Title bar — clickable as link to permalink */}
+        <a
+          href={`/posts/${post.id}`}
+          className="flex items-center gap-2 border-b border-[var(--border)] bg-[oklch(0.08_0.01_260)] px-3 py-2 hover:bg-[oklch(0.1_0.01_260)] transition-colors"
+          onClick={e => e.stopPropagation()}
+        >
           <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
           <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
           <span className="h-3 w-3 rounded-full bg-[#28c840]" />
@@ -98,12 +110,17 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
               </div>
             )}
             {/* Report — icon-only in the title bar */}
-            <ReportButton postId={post.id} reporterWallet={walletAddress} iconOnly />
+            <span onClick={e => e.preventDefault()}>
+              <ReportButton postId={post.id} reporterWallet={walletAddress} iconOnly />
+            </span>
           </div>
-        </div>
+        </a>
 
-        {/* Screenshot */}
-        <div className="relative bg-[oklch(0.09_0.01_260)]">
+        {/* Screenshot — single click navigates, double-tap votes */}
+        <div
+          className="relative bg-[oklch(0.09_0.01_260)] cursor-pointer select-none"
+          onClick={handleImageClick}
+        >
           <img
             src={post.image_url}
             alt={post.title}
@@ -139,7 +156,7 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
 
           {/* Vote */}
           <button
-            onClick={handleVote}
+            onClick={e => { e.stopPropagation(); handleVote(); }}
             className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-all ${
               voted
                 ? 'border-[var(--accent)] bg-[oklch(0.72_0.2_25/0.15)] text-[var(--accent)]'
@@ -147,7 +164,7 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
             }`}
             title={voted ? 'Remove vote' : 'Vote this fail'}
           >
-            <span className={`transition-transform ${voted ? 'scale-125' : ''}`}>🔥</span>
+            <span className={`transition-transform ${voted ? 'scale-125' : ''}`}>🤦‍♂️</span>
             <span>{formatUpvotes(localCount)}</span>
           </button>
 

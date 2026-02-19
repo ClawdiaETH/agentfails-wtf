@@ -6,13 +6,13 @@ import { usePosts, Tab } from '@/hooks/usePosts';
 import { useVote } from '@/hooks/useVote';
 import { useMember } from '@/hooks/useMember';
 import { PostCard } from './PostCard';
-import { showToast } from './Toast';
 
 interface PostFeedProps {
   activeTab: Tab;
+  onNeedSignup?: () => void;
 }
 
-export function PostFeed({ activeTab }: PostFeedProps) {
+export function PostFeed({ activeTab, onNeedSignup }: PostFeedProps) {
   const { address } = useAccount();
   const { member } = useMember(address);
   const { posts, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts(activeTab);
@@ -37,7 +37,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
 
   function handleVote(postId: string) {
     if (!address || !member) {
-      showToast('🔗 Sign up to vote');
+      onNeedSignup?.();
       return;
     }
     const removing = votedIds.has(postId);
@@ -79,6 +79,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
             onVote={handleVote}
             walletAddress={address}
             rank={activeTab === 'hof' ? i + 1 : undefined}
+            onNeedSignup={onNeedSignup}
           />
         ))}
       </div>

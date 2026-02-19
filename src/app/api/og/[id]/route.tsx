@@ -187,7 +187,7 @@ export async function GET(
             width:          W,
             height:         IMG_H,
             flexShrink:     0,
-            background:     '#111118',
+            background:     '#000000',
             overflow:       'hidden',
           }}
         >
@@ -283,8 +283,7 @@ export async function GET(
               marginLeft: 32,
             }}
           >
-            <span style={{ fontSize: 22 }}>💀</span>
-            <span style={{ color: '#ff6b35', fontWeight: 800, fontSize: 20, fontFamily }}>
+            <span style={{ color: '#ff6b35', fontWeight: 800, fontSize: 22, fontFamily }}>
               agentfails.wtf
             </span>
           </div>
