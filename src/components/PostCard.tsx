@@ -90,7 +90,7 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
           <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
           <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
           <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-          <span className="ml-2 font-mono text-xs text-[var(--muted)]">
+          <span className="ml-2 font-mono text-sm text-[var(--muted)]">
             {AGENT_LABELS[post.agent] ?? post.agent} — session
           </span>
         </div>
@@ -114,9 +114,9 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
 
       {/* ── Card body ── */}
       <div className="px-4 py-3">
-        <h2 className="mb-1 text-sm font-semibold leading-snug">{post.title}</h2>
+        <h2 className="mb-1 text-base font-semibold leading-snug">{post.title}</h2>
         {post.caption && (
-          <p className="mb-2.5 text-xs leading-relaxed text-[var(--muted)]">{post.caption}</p>
+          <p className="mb-2.5 text-sm leading-relaxed text-[var(--muted)]">{post.caption}</p>
         )}
 
         {/* Footer row */}
@@ -136,20 +136,20 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
           </button>
 
           {/* Fail type tag */}
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${failColor}`}>
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${failColor}`}>
             {FAIL_LABELS[post.fail_type] ?? post.fail_type}
           </span>
 
           {/* Agent tag */}
-          <span className="rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
+          <span className="rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)]">
             {AGENT_LABELS[post.agent] ?? post.agent}
           </span>
 
           {/* Meta: submitter + time */}
-          <div className="ml-auto flex items-center gap-1.5 text-[10px] text-[var(--muted)]">
+          <div className="ml-auto flex items-center gap-1.5 text-xs text-[var(--muted)]">
             {post.submitter_wallet ? (
               <>
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[8px] font-bold text-white">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">
                   {post.submitter_wallet[2]?.toUpperCase()}
                 </span>
                 <span>{truncateAddress(post.submitter_wallet)}</span>
@@ -167,7 +167,7 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
               href={post.source_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-[var(--muted)] underline hover:text-[var(--text)] transition-colors"
+              className="text-xs text-[var(--muted)] underline hover:text-[var(--text)] transition-colors"
               onClick={e => e.stopPropagation()}
             >
               source ↗
