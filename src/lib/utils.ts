@@ -1,6 +1,6 @@
-export function truncateAddress(address: string, length = 6): string {
+export function truncateAddress(address: string, length = 4): string {
   if (!address) return '';
-  return `${address.slice(0, length)}...${address.slice(-4)}`;
+  return `${address.slice(0, length)}…${address.slice(-3)}`;
 }
 
 export function timeAgo(dateString: string | Date): string {

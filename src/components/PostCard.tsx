@@ -90,12 +90,16 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
           <span className="ml-2 font-mono text-sm text-[var(--muted)]">
             {AGENT_LABELS[post.agent] ?? post.agent} — session
           </span>
-          {/* Hall-of-fame rank badge — right-aligned in title bar */}
-          {rank && rank <= 3 && (
-            <div className="ml-auto rounded px-1.5 py-0.5 font-mono text-xs font-bold" style={{ background: 'var(--gold)', color: 'oklch(0.2 0.05 85)' }}>
-              {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'} #{rank}
-            </div>
-          )}
+          {/* Right side of title bar */}
+          <div className="ml-auto flex items-center gap-2">
+            {rank && rank <= 3 && (
+              <div className="rounded px-1.5 py-0.5 font-mono text-xs font-bold" style={{ background: 'var(--gold)', color: 'oklch(0.2 0.05 85)' }}>
+                {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'} #{rank}
+              </div>
+            )}
+            {/* Report — icon-only in the title bar */}
+            <ReportButton postId={post.id} reporterWallet={walletAddress} iconOnly />
+          </div>
         </div>
 
         {/* Screenshot */}
@@ -130,46 +134,44 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
           <p className="mb-2.5 text-sm leading-relaxed text-[var(--muted)]">{post.caption}</p>
         )}
 
-        {/* Footer row */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Footer row — single line, no wrap */}
+        <div className="flex items-center gap-2 overflow-hidden">
 
-          {/* Upvote button */}
+          {/* Vote */}
           <button
             onClick={handleVote}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
+            className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-all ${
               voted
                 ? 'border-[var(--accent)] bg-[oklch(0.72_0.2_25/0.15)] text-[var(--accent)]'
                 : 'border-[var(--border)] bg-[oklch(0.2_0.015_260)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
             }`}
             title={voted ? 'Remove vote' : 'Vote this fail'}
           >
-            <span className={`text-sm transition-transform ${voted ? 'scale-125' : ''}`}>🔥</span>
-            {formatUpvotes(localCount)}
+            <span className={`transition-transform ${voted ? 'scale-125' : ''}`}>🔥</span>
+            <span>{formatUpvotes(localCount)}</span>
           </button>
 
           {/* Fail type tag */}
-          <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${failColor}`}>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${failColor}`}>
             {FAIL_LABELS[post.fail_type] ?? post.fail_type}
           </span>
 
           {/* Agent tag */}
-          <span className="rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)]">
+          <span className="shrink-0 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)]">
             {AGENT_LABELS[post.agent] ?? post.agent}
           </span>
 
-          {/* Meta: submitter + time */}
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-[var(--muted)]">
+          {/* Spacer */}
+          <div className="flex-1 min-w-0" />
+
+          {/* Meta: submitter + time — compact */}
+          <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
             {post.submitter_wallet ? (
-              <>
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">
-                  {post.submitter_wallet[2]?.toUpperCase()}
-                </span>
-                <span>{truncateAddress(post.submitter_wallet)}</span>
-              </>
+              <span className="font-mono">{truncateAddress(post.submitter_wallet)}</span>
             ) : (
-              <span className="font-mono opacity-60">🤖 agent</span>
+              <span className="opacity-50">🤖</span>
             )}
-            <span>·</span>
+            <span className="opacity-40">·</span>
             <span>{timeAgo(post.created_at)}</span>
           </div>
 
@@ -179,20 +181,17 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
               href={post.source_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[var(--muted)] underline hover:text-[var(--text)] transition-colors"
+              className="shrink-0 text-xs text-[var(--muted)] underline hover:text-[var(--text)] transition-colors"
               onClick={e => e.stopPropagation()}
             >
-              source ↗
+              src↗
             </a>
           )}
 
-          {/* Report */}
-          <ReportButton postId={post.id} reporterWallet={walletAddress} />
-
-          {/* Discuss — pill button */}
+          {/* Discuss */}
           <a
             href={`/posts/${post.id}#comments`}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-3 py-1 text-xs font-semibold text-[var(--text)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2.5 py-1 text-xs font-semibold text-[var(--text)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={e => e.stopPropagation()}
           >
             💬 discuss
@@ -201,7 +200,7 @@ export function PostCard({ post, voted, onVote, walletAddress, rank }: PostCardP
           {/* Share */}
           <button
             onClick={e => { e.stopPropagation(); setShareOpen(true); }}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-3 py-1 text-xs font-semibold text-[var(--muted)] transition-all hover:border-[oklch(0.75_0.16_140/0.6)] hover:text-[oklch(0.75_0.16_140)]"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2.5 py-1 text-xs font-semibold text-[var(--muted)] transition-all hover:border-[oklch(0.75_0.16_140/0.6)] hover:text-[oklch(0.75_0.16_140)]"
             title="Share this fail"
           >
             ↗ share
