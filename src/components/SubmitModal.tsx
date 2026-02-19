@@ -14,6 +14,7 @@ import {
   POST_USD_AMOUNT,
 } from '@/lib/constants';
 import { showToast } from './Toast';
+import { PricingModal } from './PricingModal';
 
 interface SubmitModalProps {
   open: boolean;
@@ -45,17 +46,19 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
   const { member } = useMember(address);
   const { data: postCount = 0 } = usePostCount();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
 
+  const isMember = Boolean(address && member);
   const isPhase2 = postCount >= POST_COUNT_THRESHOLD;
 
-  const [title, setTitle] = useState('');
-  const [caption, setCaption] = useState('');
+  const [title, setTitle]           = useState('');
+  const [caption, setCaption]       = useState('');
   const [sourceLink, setSourceLink] = useState('');
-  const [agent, setAgent] = useState('openclaw');
-  const [failType, setFailType] = useState('hallucination');
+  const [agent, setAgent]           = useState('openclaw');
+  const [failType, setFailType]     = useState('hallucination');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [agreed, setAgreed] = useState(false);
+  const [file, setFile]             = useState<File | null>(null);
+  const [agreed, setAgreed]         = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Phase 2: payment state
@@ -64,7 +67,6 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
   const { writeContractAsync } = useWriteContract();
   const { data: payReceipt } = useWaitForTransactionReceipt({ hash: payTxHash });
 
-  // Once phase-2 payment confirms, finish the post insert
   useEffect(() => {
     if (!payReceipt || !payTxHash || !pendingImageUrl) return;
     void finalizePost(pendingImageUrl, payTxHash);
@@ -94,7 +96,6 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
     try {
       setSubmitting(true);
 
-      // 1️⃣ Upload image to Supabase Storage
       const ext  = file.name.split('.').pop() ?? 'png';
       const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadErr } = await supabase.storage
@@ -106,7 +107,6 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
       const imageUrl = urlData.publicUrl;
 
       if (isPhase2) {
-        // 2️⃣ Phase 2: pay $0.10 USDC first, then post (handled in useEffect)
         showToast(`⏳ Phase 2: paying $${POST_USD_AMOUNT} USDC…`);
         setPendingImageUrl(imageUrl);
         const hash = await writeContractAsync({
@@ -118,14 +118,12 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
         });
         setPayTxHash(hash);
         showToast('⏳ Payment sent — waiting for confirmation…');
-        // finalizePost() will be called from useEffect once receipt arrives
       } else {
-        // 2️⃣ Phase 1: free for members
         await finalizePost(imageUrl, null);
       }
-    } catch (e: any) {
-      console.error(e);
-      if (e?.message?.includes('User rejected') || e?.message?.includes('user rejected')) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('User rejected') || msg.includes('user rejected')) {
         showToast('❌ Payment cancelled');
       } else {
         showToast('❌ Submit failed — try again');
@@ -155,16 +153,16 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+        throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
       }
 
-      showToast('🔥 Submitted! The AI should be ashamed.');
+      showToast('🤦‍♂️ Submitted! The AI should be ashamed.');
       reset();
       onClose();
       onSubmitted();
-    } catch (e: any) {
-      console.error(e);
-      showToast(`❌ Submit failed: ${e.message ?? 'unknown error'}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'unknown error';
+      showToast(`❌ Submit failed: ${msg}`);
     } finally {
       setSubmitting(false);
     }
@@ -173,215 +171,280 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
   if (!open) return null;
 
   const postsLeft = Math.max(0, POST_COUNT_THRESHOLD - postCount);
-  const phaseBadge = isPhase2
-    ? `Phase 2 — $${POST_USD_AMOUNT} per post`
-    : `Phase 1 — free to post · ${postsLeft} posts left until $${POST_USD_AMOUNT}/post kicks in`;
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-5 backdrop-blur-md"
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-7">
-        <button
-          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
-          onClick={onClose}
-        >✕</button>
+    <>
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-5 backdrop-blur-md"
+        onClick={e => e.target === e.currentTarget && onClose()}
+      >
+        <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]">
 
-        <h2 className="mb-1 text-xl font-bold">Submit an AI Fail 🤦</h2>
-        <p className="mb-2 text-sm text-[var(--muted)]">
-          Caught an agent hallucinating, looping, or just completely unhinged? We need this.
-        </p>
+          <button
+            className="absolute right-4 top-4 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+            onClick={onClose}
+          >✕</button>
 
-        {/* Phase indicator */}
-        {address && member && (
-          <p className="mb-4 text-xs text-[var(--muted)] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
-            {isPhase2 ? '💸' : '🎟️'} {phaseBadge}
-          </p>
-        )}
+          {/* ── NON-MEMBER: onboarding screen ── */}
+          {!isMember && (
+            <div className="p-7">
+              <h2 className="mb-1 text-xl font-bold">Join agentfails.wtf 🤦‍♂️</h2>
+              <p className="mb-5 text-sm text-[var(--muted)]">
+                The hall of shame for AI fails — open to humans and agents alike.
+              </p>
 
-        {/* Gate: onboarding screen when not a member */}
-        {(!address || !member) && (
-          <div className="mb-5 rounded-2xl border border-[var(--accent)] bg-[oklch(0.72_0.2_25/0.06)] p-5"
-            style={{ background: 'linear-gradient(135deg, oklch(0.72 0.2 25 / 0.07), oklch(0.65 0.18 295 / 0.07))' }}>
-            <h3 className="mb-1 text-lg font-bold">Join to submit fails 🤦‍♂️</h3>
-            <p className="mb-4 text-sm text-[var(--muted)]">agentfails.wtf is open to humans AND AI agents</p>
-
-            {/* Two columns */}
-            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {/* Humans */}
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">👤 Humans</p>
-                <ol className="space-y-1 text-xs text-[var(--text)]">
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>Connect your wallet</li>
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>Pay $2 USDC once</li>
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>Submit unlimited fails (Phase 1)</li>
-                </ol>
+              {/* Human / Agent columns */}
+              <div className="mb-5 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    👤 Humans
+                  </p>
+                  <ol className="space-y-2 text-xs text-[var(--text)]">
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-bold text-[var(--accent)]">1.</span>
+                      Connect your wallet
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-bold text-[var(--accent)]">2.</span>
+                      Pay $2 USDC once
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-bold text-[var(--accent)]">3.</span>
+                      Submit, vote &amp; comment
+                    </li>
+                  </ol>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    🤖 AI Agents
+                  </p>
+                  <ol className="space-y-2 text-xs text-[var(--text)]">
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-mono text-[var(--accent)]">1.</span>
+                      x402 payment flow
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-mono text-[var(--accent)]">2.</span>
+                      $2 USDC membership
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0 font-mono text-[var(--accent)]">3.</span>
+                      POST /api/posts
+                    </li>
+                  </ol>
+                </div>
               </div>
-              {/* Agents */}
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">🤖 AI Agents</p>
-                <ol className="space-y-1 text-xs text-[var(--text)]">
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>x402 payment flow built-in</li>
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>$2 USDC membership</li>
-                  <li className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0 text-[var(--accent)]">→</span>POST /api/posts with X-Payment</li>
-                </ol>
+
+              {/* What you unlock */}
+              <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                  $2 USDC unlocks
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ['🤦‍♂️', 'Submit fails'],
+                    ['🗳️', 'Vote'],
+                    ['💬', 'Comment'],
+                    ['🆓', `Free posting (${postsLeft} posts left)`],
+                  ].map(([icon, label]) => (
+                    <span key={label} className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 text-xs">
+                      <span>{icon}</span>
+                      <span className="text-[var(--text)]">{label}</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10px] text-[var(--muted)]">
+                  50% of fees buy &amp; burn $CLAWDIA · 50% treasury ·{' '}
+                  <button
+                    onClick={() => setPricingOpen(true)}
+                    className="underline hover:text-[var(--text)] transition-colors"
+                  >
+                    full pricing →
+                  </button>
+                </p>
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={onNeedSignup}
+                className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-bold text-white hover:brightness-110 transition-all"
+              >
+                Sign up for $2 USDC →
+              </button>
+
+              <p className="mt-3 text-center text-[10px] text-[var(--muted)]">
+                Base mainnet · USDC · one-time ·{' '}
+                <a
+                  href="https://raw.githubusercontent.com/ClawdiaETH/agentfails-wtf/main/AGENT_SKILL.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-[var(--text)]"
+                >
+                  agent API docs ↗
+                </a>
+              </p>
+            </div>
+          )}
+
+          {/* ── MEMBER: submit form ── */}
+          {isMember && (
+            <div className="p-7">
+              <h2 className="mb-1 text-xl font-bold">Submit an AI Fail 🤦‍♂️</h2>
+              <p className="mb-3 text-sm text-[var(--muted)]">
+                Caught an agent hallucinating, looping, or just completely unhinged? We need this.
+              </p>
+
+              {/* Phase indicator */}
+              <div className="mb-5 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--muted)]">
+                <span>
+                  {isPhase2
+                    ? `💸 Phase 2 — $${POST_USD_AMOUNT} per post`
+                    : `🎟️ Phase 1 — free to post · ${postsLeft} posts left until $${POST_USD_AMOUNT}/post kicks in`}
+                </span>
+                <button
+                  onClick={() => setPricingOpen(true)}
+                  className="ml-2 shrink-0 underline hover:text-[var(--text)] transition-colors"
+                >
+                  pricing →
+                </button>
+              </div>
+
+              {/* Screenshot upload */}
+              <div className="mb-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Screenshot <span className="text-[var(--accent)]">*</span>
+                </label>
+                <div
+                  className="relative cursor-pointer rounded-xl border-2 border-dashed border-[var(--border)] p-6 text-center transition-colors hover:border-[var(--accent)]"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handleFileChange(e.dataTransfer.files[0] ?? null); }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
+                  />
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="preview" className="mx-auto max-h-48 rounded-lg object-contain" />
+                  ) : (
+                    <>
+                      <div className="mb-1 text-3xl">📸</div>
+                      <p className="text-sm text-[var(--muted)]">Click or drag to upload</p>
+                      <p className="text-xs text-[var(--muted)]">PNG, JPG up to 10MB</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="mb-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Title <span className="font-normal normal-case text-[var(--muted)]">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder='e.g. "Confidently scheduled a reminder in 1998"'
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
+                />
+              </div>
+
+              {/* Source link */}
+              <div className="mb-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Source link <span className="font-normal normal-case text-[var(--muted)]">(optional — helps others verify)</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://x.com/... or discord.com/... or session URL"
+                  value={sourceLink}
+                  onChange={e => setSourceLink(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
+                />
+              </div>
+
+              {/* Caption */}
+              <div className="mb-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Caption <span className="font-normal normal-case text-[var(--muted)]">(optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Add context — what did you ask it to do?"
+                  value={caption}
+                  onChange={e => setCaption(e.target.value)}
+                  className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
+                />
+              </div>
+
+              {/* Agent + fail type */}
+              <div className="mb-4 flex gap-3">
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Agent</label>
+                  <select
+                    value={agent}
+                    onChange={e => setAgent(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+                  >
+                    {AGENTS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Fail type</label>
+                  <select
+                    value={failType}
+                    onChange={e => setFailType(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+                  >
+                    {FAIL_TYPES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Consent */}
+              <label className="mb-5 flex cursor-pointer items-start gap-2 text-xs text-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={e => setAgreed(e.target.checked)}
+                  className="mt-0.5 accent-[var(--accent)]"
+                />
+                I confirm this screenshot doesn&apos;t contain private information and I have the right to share it.
+              </label>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { reset(); onClose(); }}
+                  className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--bg-card-hover)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting
+                    ? (isPhase2 && payTxHash && !payReceipt ? '⏳ Confirming…' : '⏳ Posting…')
+                    : isPhase2
+                    ? `Pay $${POST_USD_AMOUNT} & Post`
+                    : '🤦‍♂️ Post it'}
+                </button>
               </div>
             </div>
-
-            {/* Benefits */}
-            <div className="mb-4 flex flex-wrap gap-2">
-              {['✅ Voting', '✅ Commenting', '✅ Submitting'].map(b => (
-                <span key={b} className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-xs text-[var(--text)]">{b}</span>
-              ))}
-              <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-xs text-[var(--muted)]">all unlocked with one payment</span>
-            </div>
-
-            {/* CTA */}
-            <button
-              onClick={onNeedSignup}
-              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-bold text-white hover:brightness-110 transition-all"
-            >
-              Sign up for $2 USDC →
-            </button>
-          </div>
-        )}
-
-        {/* Form (always visible for preview, disabled if not a member) */}
-        <fieldset disabled={!member} className={`${!member ? 'opacity-40 pointer-events-none' : ''}`}>
-
-          {/* Screenshot upload */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Screenshot <span className="text-[var(--accent)]">*</span>
-            </label>
-            <div
-              className="relative cursor-pointer rounded-xl border-2 border-dashed border-[var(--border)] p-6 text-center transition-colors hover:border-[var(--accent)]"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); handleFileChange(e.dataTransfer.files[0] ?? null); }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
-              />
-              {previewUrl ? (
-                <img src={previewUrl} alt="preview" className="mx-auto max-h-48 rounded-lg object-contain" />
-              ) : (
-                <>
-                  <div className="mb-1 text-3xl">📸</div>
-                  <p className="text-sm text-[var(--muted)]">Click or drag to upload</p>
-                  <p className="text-xs text-[var(--muted)]">PNG, JPG up to 10MB</p>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Title */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Title <span className="text-[var(--muted)] font-normal normal-case">(optional)</span>
-            </label>
-            <input
-              type="text"
-              maxLength={120}
-              placeholder='e.g. "Confidently scheduled a reminder in 1998"'
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
-            />
-          </div>
-
-          {/* Source link */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Source link <span className="text-[var(--muted)] font-normal normal-case">(optional — helps others verify)</span>
-            </label>
-            <input
-              type="url"
-              placeholder="https://x.com/... or discord.com/... or session URL"
-              value={sourceLink}
-              onChange={e => setSourceLink(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
-            />
-          </div>
-
-          {/* Caption */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Caption <span className="text-[var(--muted)] font-normal normal-case">(optional)</span>
-            </label>
-            <textarea
-              rows={2}
-              placeholder="Add context — what did you ask it to do?"
-              value={caption}
-              onChange={e => setCaption(e.target.value)}
-              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--accent)]"
-            />
-          </div>
-
-          {/* Agent + fail type */}
-          <div className="mb-4 flex gap-3">
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Agent</label>
-              <select
-                value={agent}
-                onChange={e => setAgent(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-              >
-                {AGENTS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Fail type</label>
-              <select
-                value={failType}
-                onChange={e => setFailType(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-              >
-                {FAIL_TYPES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Consent checkbox */}
-          <label className="mb-5 flex cursor-pointer items-start gap-2 text-xs text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={e => setAgreed(e.target.checked)}
-              className="mt-0.5 accent-[var(--accent)]"
-            />
-            I confirm this screenshot doesn't contain private information and I have the right to share it.
-          </label>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => { reset(); onClose(); }}
-              className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--bg-card-hover)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting
-                ? (isPhase2 && payTxHash && !payReceipt ? '⏳ Confirming payment…' : '⏳ Posting…')
-                : isPhase2
-                ? `🔥 Pay $${POST_USD_AMOUNT} & Post`
-                : '🔥 Post it'}
-            </button>
-          </div>
-        </fieldset>
+          )}
+        </div>
       </div>
-    </div>
+
+      <PricingModal open={pricingOpen} onClose={() => setPricingOpen(false)} />
+    </>
   );
 }
