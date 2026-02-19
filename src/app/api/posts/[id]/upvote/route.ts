@@ -18,13 +18,14 @@ function getSupabaseAdmin() {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const postId = params.id;
-  let body: Record<string, any> = {};
+  const { id: postId } = await params;
+
+  let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* wallet optional */ }
 
-  const voter = body.wallet_address?.toLowerCase() ?? null;
+  const voter = (body.wallet_address as string | undefined)?.toLowerCase() ?? null;
 
   const supabase = getSupabaseAdmin();
 
@@ -43,7 +44,7 @@ export async function POST(
   }
 
   // Increment upvote_count
-  const { data: post, error } = await supabase.rpc('increment_upvote', { post_id: postId });
+  const { error } = await supabase.rpc('increment_upvote', { post_id: postId });
   if (error) {
     // Fallback: manual increment
     const { data: current } = await supabase
@@ -52,9 +53,10 @@ export async function POST(
       .eq('id', postId)
       .single();
 
+    const currentCount = (current as { upvote_count?: number } | null)?.upvote_count ?? 0;
     await supabase
       .from('posts')
-      .update({ upvote_count: (current?.upvote_count ?? 0) + 1 })
+      .update({ upvote_count: currentCount + 1 })
       .eq('id', postId);
   }
 
