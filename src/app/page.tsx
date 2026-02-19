@@ -35,7 +35,10 @@ function HomeContent() {
   }
 
   function handleJoined() {
-    // Close everything — show confetti, let the user choose what to do next
+    // Invalidate member query so every useMember() instance (PostFeed, WalletModal,
+    // SubmitModal) sees the new membership status without a page refresh
+    void queryClient.invalidateQueries({ queryKey: ['member'] });
+    // Close everything and celebrate
     setWalletModalOpen(false);
     setSubmitModalOpen(false);
     setConfetti(true);
