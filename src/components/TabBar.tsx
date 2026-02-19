@@ -22,7 +22,7 @@ export function TabBar({ activeTab, onChange }: TabBarProps) {
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+          className={`whitespace-nowrap border-b-2 px-4 py-3 text-base font-semibold transition-colors ${
             activeTab === tab.id
               ? 'border-[var(--accent)] text-[var(--text)]'
               : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
