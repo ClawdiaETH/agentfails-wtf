@@ -16,10 +16,10 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'OpenClaw Gone Wild 🐚',
+  title: 'AgentFails.wtf 🤦',
   description: 'The internet\'s hall of shame for AI agent fails, hallucinations, and unhinged moments. $CLAWDIA token-gated on Base.',
   openGraph: {
-    title: 'OpenClaw Gone Wild 🐚',
+    title: 'AgentFails.wtf 🤦',
     description: 'Hall of shame for AI agent fails. Token-gated on Base.',
     type: 'website',
   },

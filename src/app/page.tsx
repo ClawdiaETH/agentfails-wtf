@@ -51,9 +51,9 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
-        OpenClaw Gone Wild is user-generated satire and commentary.
+        AgentFails.wtf is user-generated satire and commentary.
         All screenshots submitted by users.{' '}
-        <a href="mailto:conduct@openclawgonewild.com" className="hover:text-[var(--text)] underline">
+        <a href="mailto:conduct@agentfails.wtf" className="hover:text-[var(--text)] underline">
           Report abuse
         </a>
       </footer>

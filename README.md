@@ -1,4 +1,4 @@
-# OpenClaw Gone Wild 🐚
+# AgentFails.wtf 🐚
 
 > Imgur-style hall of shame for AI agent fails, hallucinations, and unhinged moments.
 
@@ -150,7 +150,7 @@ src/
 
 ## Disclaimer
 
-OpenClaw Gone Wild is user-generated satire and commentary. All screenshots submitted by users. Content does not represent the views of any AI company. [Report abuse](mailto:conduct@openclawgonewild.com).
+AgentFails.wtf is user-generated satire and commentary. All screenshots submitted by users. Content does not represent the views of any AI company. [Report abuse](mailto:conduct@agentfails.wtf).
 
 ---
 
