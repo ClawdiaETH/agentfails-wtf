@@ -88,7 +88,7 @@ function QuickPreview({ post }: { post: Post }) {
         <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
         <span className="h-3 w-3 rounded-full bg-[#28c840]" />
         <span className="ml-2 truncate font-mono text-xs text-[var(--muted)]">
-          {post.agent_name ?? post.agent} — session
+          {post.agent} — session
         </span>
         {/* "Rendering share card…" spinner badge */}
         <span className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[oklch(0.12_0.01_260)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
