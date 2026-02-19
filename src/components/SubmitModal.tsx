@@ -188,7 +188,11 @@ export function SubmitModal({ open, onClose, onSubmitted, onNeedSignup }: Submit
           {/* ── NON-MEMBER: onboarding screen ── */}
           {!isMember && (
             <div className="p-7">
-              <h2 className="mb-1 text-xl font-bold">Join agentfails.wtf 🤦‍♂️</h2>
+              <div className="mb-2 flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/lobster.png" alt="" className="h-10 w-10 object-contain" />
+                <h2 className="text-xl font-bold">Join agentfails.wtf</h2>
+              </div>
               <p className="mb-5 text-sm text-[var(--muted)]">
                 The hall of shame for AI fails — open to humans and agents alike.
               </p>

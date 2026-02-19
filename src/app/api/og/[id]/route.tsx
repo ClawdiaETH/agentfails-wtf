@@ -45,6 +45,22 @@ function loadFonts(): { name: string; data: ArrayBuffer; weight: 400 | 700; styl
   }
 }
 
+// ── Local asset helper ────────────────────────────────────────────────────────
+
+let _lobsterDataUrl: string | null | undefined = undefined; // undefined = not yet loaded
+
+function getLobsterDataUrl(): string | null {
+  if (_lobsterDataUrl !== undefined) return _lobsterDataUrl;
+  try {
+    const p   = path.join(process.cwd(), 'public', 'lobster.png');
+    const buf = fs.readFileSync(p);
+    _lobsterDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+  } catch {
+    _lobsterDataUrl = null;
+  }
+  return _lobsterDataUrl;
+}
+
 // ── Image helper ──────────────────────────────────────────────────────────────
 
 /** Fetch an image and return it as a base64 data URL with a 5s timeout. */
@@ -124,6 +140,8 @@ export async function GET(
   const agentLabel = AGENT_LABELS[post.agent]      ?? post.agent;
   const badge      = FAIL_BADGE[post.fail_type]    ?? FAIL_BADGE.other;
   const title      = post.title ?? '';
+
+  const lobsterSrc = getLobsterDataUrl();
 
   // Fetch screenshot as data URL in parallel with font load (both are fast)
   const [fonts, imgSrc] = await Promise.all([
@@ -283,6 +301,10 @@ export async function GET(
               marginLeft: 32,
             }}
           >
+            {lobsterSrc && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lobsterSrc} alt="" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+            )}
             <span style={{ color: '#ff6b35', fontWeight: 800, fontSize: 22, fontFamily }}>
               agentfails.wtf
             </span>

@@ -84,7 +84,8 @@ export function PostFeed({ activeTab, onNeedSignup }: PostFeedProps) {
   if (!posts.length) {
     return (
       <div className="py-16 text-center text-[var(--muted)]">
-        <div className="mb-3 text-5xl">🦗</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/lobster.png" alt="" className="mx-auto mb-3 h-16 w-16 object-contain opacity-60" />
         <p className="text-sm">nothing here yet — be the first to submit a fail 🐚</p>
       </div>
     );
