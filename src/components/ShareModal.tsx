@@ -3,8 +3,9 @@
 /**
  * ShareModal — shows a branded share card and surfaces share actions.
  *
- * Preview uses /api/og/[id] — server-side Satori rendering, no CORS issues,
- * no html-to-image font-metric weirdness.
+ * Preview strategy:
+ *  1. Instantly render post.image_url inside a faux-macOS card (zero wait)
+ *  2. Load /api/og/[id] in background — swap in when ready
  *
  * X/Twitter: intent URL with permalink — Twitter card unfurls og:image automatically
  * Farcaster: warpcast compose with OG image URL as a direct embed (shows inline)
@@ -12,7 +13,7 @@
  * Copy: permalink to clipboard
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Post } from '@/types';
 import { showToast } from './Toast';
 
@@ -22,28 +23,128 @@ interface ShareModalProps {
   onClose: () => void;
 }
 
+const FAIL_TYPE_LABELS: Record<string, string> = {
+  confident:     '😤 Confident fail',
+  apology:       '😅 Apology cascade',
+  uno_reverse:   '🔄 Uno Reverse fail',
+  unhinged:      '🤪 Unhinged agent',
+  hallucination: '🧠 Hallucination',
+  loop:          '🔁 Infinite loop',
+  other:         '💀 Agent fail',
+};
+
+const FAIL_COLORS: Record<string, string> = {
+  hallucination: 'text-[oklch(0.78_0.18_25)]  border-[oklch(0.72_0.2_25/0.4)]  bg-[oklch(0.72_0.2_25/0.12)]',
+  confident:     'text-[oklch(0.82_0.18_85)]  border-[oklch(0.82_0.18_85/0.4)] bg-[oklch(0.82_0.18_85/0.12)]',
+  loop:          'text-[oklch(0.75_0.16_140)] border-[oklch(0.75_0.16_140/0.4)] bg-[oklch(0.75_0.16_140/0.12)]',
+  apology:       'text-[oklch(0.68_0.18_295)] border-[oklch(0.68_0.18_295/0.4)] bg-[oklch(0.68_0.18_295/0.12)]',
+  uno_reverse:   'text-[oklch(0.78_0.18_320)] border-[oklch(0.72_0.18_320/0.4)] bg-[oklch(0.72_0.18_320/0.12)]',
+  unhinged:      'text-[oklch(0.78_0.18_25)]  border-[oklch(0.72_0.2_25/0.4)]  bg-[oklch(0.72_0.2_25/0.12)]',
+  other:         'text-[oklch(0.75_0.14_260)] border-[oklch(0.5_0.1_260/0.4)]  bg-[oklch(0.5_0.1_260/0.12)]',
+};
+
 function trunc(str: string | null | undefined, n: number) {
   if (!str) return '';
   return str.length > n ? str.slice(0, n - 1) + '…' : str;
 }
 
+/** Animated shimmer skeleton that mirrors the card layout */
+function CardSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[oklch(0.09_0.01_260)]">
+      {/* Title bar */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[oklch(0.07_0.01_260)] px-3 py-2.5">
+        <span className="h-3 w-3 rounded-full bg-[oklch(0.3_0.01_0)] animate-pulse" />
+        <span className="h-3 w-3 rounded-full bg-[oklch(0.3_0.01_0)] animate-pulse [animation-delay:0.15s]" />
+        <span className="h-3 w-3 rounded-full bg-[oklch(0.3_0.01_0)] animate-pulse [animation-delay:0.3s]" />
+        <div className="ml-2 h-2.5 w-32 rounded-full bg-[oklch(0.2_0.01_260)] animate-pulse [animation-delay:0.1s]" />
+      </div>
+      {/* Image area */}
+      <div className="relative h-48 bg-[oklch(0.08_0.01_260)] overflow-hidden">
+        <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.6s_infinite] bg-gradient-to-r from-transparent via-[oklch(0.18_0.01_260/0.6)] to-transparent" />
+      </div>
+      {/* Body */}
+      <div className="px-4 py-3 space-y-2">
+        <div className="h-2.5 w-3/4 rounded-full bg-[oklch(0.2_0.01_260)] animate-pulse" />
+        <div className="flex gap-2 pt-1">
+          <div className="h-5 w-16 rounded-full bg-[oklch(0.2_0.01_260)] animate-pulse [animation-delay:0.2s]" />
+          <div className="h-5 w-24 rounded-full bg-[oklch(0.2_0.01_260)] animate-pulse [animation-delay:0.35s]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Instant mini card using post.image_url — shown while OG image loads */
+function QuickPreview({ post }: { post: Post }) {
+  const label = post.title ?? FAIL_TYPE_LABELS[post.fail_type] ?? 'Agent fail';
+  const badgeColor = FAIL_COLORS[post.fail_type] ?? FAIL_COLORS.other;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[oklch(0.09_0.01_260)]">
+      {/* macOS title bar */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[oklch(0.07_0.01_260)] px-3 py-2.5">
+        <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+        <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
+        <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+        <span className="ml-2 truncate font-mono text-xs text-[var(--muted)]">
+          {post.agent_name ?? post.agent} — session
+        </span>
+        {/* "Rendering share card…" spinner badge */}
+        <span className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[oklch(0.12_0.01_260)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
+          <svg className="h-2.5 w-2.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+          </svg>
+          rendering…
+        </span>
+      </div>
+      {/* Screenshot */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={post.image_url}
+        alt={label}
+        className="block max-h-64 w-full object-contain bg-[oklch(0.08_0.01_260)]"
+      />
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <div className="flex flex-wrap gap-2">
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap ${badgeColor}`}>
+            {FAIL_TYPE_LABELS[post.fail_type] ?? post.fail_type}
+          </span>
+        </div>
+        <span className="shrink-0 text-xs font-bold text-[var(--accent)]">agentfails.wtf</span>
+      </div>
+    </div>
+  );
+}
+
 export function ShareModal({ post, open, onClose }: ShareModalProps) {
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [ogReady, setOgReady]   = useState(false);
   const [copyDone, setCopyDone] = useState(false);
 
   const permalink  = `https://agentfails.wtf/posts/${post.id}`;
   const ogImageUrl = `https://agentfails.wtf/api/og/${post.id}`;
   const hqImageUrl = `https://agentfails.wtf/api/og/${post.id}?hq=1`;
 
-  const titlePart = post.title ? `"${trunc(post.title, 70)}" — ` : '';
+  const shareTitle = post.title ? `"${trunc(post.title, 70)}" — ` : '';
 
-  // X: attribute to @ClawdiaBotAI; Twitter card unfurls og:image from permalink meta
-  const xText  = `🤦 ${titlePart}spotted on agentfails.wtf by @ClawdiaBotAI`;
-  const xUrl   = `https://twitter.com/intent/tweet?text=${encodeURIComponent(xText)}&url=${encodeURIComponent(permalink)}`;
+  // X: Twitter card unfurls og:image from permalink meta automatically
+  const xText = `🤦 ${shareTitle}spotted on agentfails.wtf by @ClawdiaBotAI`;
+  const xUrl  = `https://twitter.com/intent/tweet?text=${encodeURIComponent(xText)}&url=${encodeURIComponent(permalink)}`;
 
-  // Farcaster: attribute to @clawdia; embed OG image directly so Warpcast shows it inline
-  const fcText = `🤦 ${titlePart}spotted on agentfails.wtf by @clawdia\n\n${permalink}`;
+  // Farcaster: embed OG image directly so Warpcast shows it inline
+  const fcText = `🤦 ${shareTitle}spotted on agentfails.wtf by @clawdia\n\n${permalink}`;
   const fcUrl  = `https://warpcast.com/~/compose?text=${encodeURIComponent(fcText)}&embeds[]=${encodeURIComponent(ogImageUrl)}`;
+
+  // Pre-fetch OG image in background as soon as modal opens
+  useEffect(() => {
+    if (!open) { setOgReady(false); return; }
+    const img = new Image();
+    img.src = ogImageUrl;
+    img.onload = () => setOgReady(true);
+    // If OG endpoint errors, we still have the quick preview — don't crash
+    img.onerror = () => setOgReady(false);
+  }, [open, ogImageUrl]);
 
   async function handleCopy() {
     try {
@@ -62,6 +163,11 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
       className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-5 backdrop-blur-md"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
+      {/* Shimmer keyframe */}
+      <style>{`
+        @keyframes shimmer { to { transform: translateX(200%); } }
+      `}</style>
+
       <div className="relative w-full max-w-xl rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6">
         {/* Close */}
         <button
@@ -71,25 +177,27 @@ export function ShareModal({ post, open, onClose }: ShareModalProps) {
 
         <h2 className="mb-4 text-base font-bold">Share this fail ↗</h2>
 
-        {/* OG image preview — rendered server-side, no CORS issues */}
-        <div className="mb-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[oklch(0.09_0.01_260)]">
-          {!imgLoaded && (
-            <div className="flex h-40 items-center justify-center text-sm text-[var(--muted)]">
-              ⏳ Loading…
-            </div>
-          )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={ogImageUrl}
-            alt="Share card preview"
-            className={`w-full rounded-xl transition-opacity duration-200 ${imgLoaded ? 'opacity-100' : 'opacity-0 h-0'}`}
-            onLoad={() => setImgLoaded(true)}
-          />
+        {/* Preview area — instant QuickPreview → OG image crossfade */}
+        <div className="mb-4 relative">
+          {/* OG image — absolutely overlaid, fades in when ready */}
+          <div className={`transition-opacity duration-500 ${ogReady ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={ogImageUrl}
+              alt="Share card"
+              className="w-full rounded-xl border border-[var(--border)]"
+            />
+          </div>
+
+          {/* Quick preview — shown instantly, fades out when OG is ready */}
+          <div className={`transition-opacity duration-500 ${ogReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            <QuickPreview post={post} />
+          </div>
         </div>
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
-          {/* Save — download 2× HQ PNG */}
+          {/* Save HQ PNG */}
           <a
             href={hqImageUrl}
             download={`agentfails-${post.id.slice(0, 8)}.png`}
