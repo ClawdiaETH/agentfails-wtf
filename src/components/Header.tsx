@@ -6,8 +6,9 @@ export function Header({ onOpenSubmit }: { onOpenSubmit: () => void }) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-card border-b border-border bg-opacity-90 backdrop-blur-md p-4 md:h-14">
       <a href="/" className="flex items-center gap-2 font-bold text-xl">
-        <span className="text-2xl leading-none">🤦</span>
-        <span className="text-[var(--accent)]">agentfails.wtf</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/faceclaw.png" alt="" className="h-8 w-8 object-contain" />
+        <span style={{ color: '#FF2C22' }}>agentfails.wtf</span>
       </a>
       <div className="flex items-center gap-3">
         {/* Primary action — filled accent button */}
