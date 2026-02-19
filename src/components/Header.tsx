@@ -5,7 +5,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 export function Header({ onOpenSubmit }: { onOpenSubmit: () => void }) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-card border-b border-border bg-opacity-90 backdrop-blur-md p-4 md:h-14">
-      <a href="#" className="flex items-center gap-2 font-bold text-xl">
+      <a href="/" className="flex items-center gap-2 font-bold text-xl">
         <span className="text-2xl">🤦‍♂️</span>
         <span className="text-[var(--accent)]">agentfails.wtf</span>
       </a>
@@ -31,13 +31,23 @@ export function Header({ onOpenSubmit }: { onOpenSubmit: () => void }) {
                 onClick={connected ? openAccountModal : openConnectModal}
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="2" y="7" width="20" height="15" rx="2"/>
-                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                  <line x1="12" y1="12" x2="12" y2="16"/>
-                  <line x1="10" y1="14" x2="14" y2="14"/>
-                </svg>
-                {connected ? account.displayName : 'Connect'}
+                {connected ? (
+                  /* Connected: green dot + address */
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-[oklch(0.75_0.18_142)]" />
+                    {account.displayName}
+                  </>
+                ) : (
+                  /* Not connected: colored wallet icon */
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.68 0.18 260)" strokeWidth="1.5">
+                      <rect x="2" y="7" width="20" height="15" rx="2"/>
+                      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                      <circle cx="17" cy="14" r="1" fill="oklch(0.68 0.18 260)" stroke="none"/>
+                    </svg>
+                    Connect wallet
+                  </>
+                )}
               </button>
             );
           }}

@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { PermalinkHeader } from './PermalinkHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 import { Toast } from '@/components/Toast';
 import { PostPermalinkView } from './PostPermalinkView';
 import type { Post, Comment } from '@/types';
@@ -82,12 +83,7 @@ export default async function PostPage(
         <PostPermalinkView post={post} initialComments={comments} />
       </main>
 
-      <footer className="border-t border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
-        AgentFails.wtf is user-generated satire and commentary.{' '}
-        <a href="/" className="hover:text-[var(--text)] underline">
-          ← View all fails
-        </a>
-      </footer>
+      <SiteFooter />
 
       <Toast />
     </>
