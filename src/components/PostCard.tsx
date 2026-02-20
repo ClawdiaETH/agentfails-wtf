@@ -173,11 +173,6 @@ export function PostCard({ post, voted, onVote, walletAddress, rank, onNeedSignu
             {FAIL_LABELS[post.fail_type] ?? post.fail_type}
           </span>
 
-          {/* Agent tag */}
-          <span className="shrink-0 rounded-full border border-[var(--border)] bg-[oklch(0.2_0.01_260)] px-2 py-0.5 text-xs text-[var(--muted)]">
-            {AGENT_LABELS[post.agent] ?? post.agent}
-          </span>
-
           {/* Spacer */}
           <div className="flex-1 min-w-0" />
 
