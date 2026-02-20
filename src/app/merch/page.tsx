@@ -6,20 +6,21 @@ import { SiteFooter } from '@/components/SiteFooter';
 const SIZES = ['S', 'M', 'L', 'XL', '2XL'] as const;
 type Size = (typeof SIZES)[number];
 
-const BASE = 'https://images-api.printify.com/mockup/6998a9e635ddad0d0308cebd/18102';
+const BASE_API = 'https://images-api.printify.com/mockup/6998a9e635ddad0d0308cebd/18102';
+const BASE_CDN = 'https://images.printify.com/mockup/6998a9e635ddad0d0308cebd/18102';
 
 const MOCKUPS = [
-  { key: 'front',    url: `${BASE}/102044/faceclaw-tee.jpg`, label: 'Front' },
-  { key: 'person1',  url: `${BASE}/102051/faceclaw-tee.jpg`, label: 'Person 1' },
-  { key: 'person6',  url: `${BASE}/102058/faceclaw-tee.jpg`, label: 'Person 6' },
-  { key: 'folded',   url: `${BASE}/102046/faceclaw-tee.jpg`, label: 'Folded' },
+  { key: 'person1', url: `${BASE_CDN}/92578/faceclaw-tee.jpg?camera_label=person-1&s=800`, label: 'Person 1' },
+  { key: 'person6', url: `${BASE_CDN}/92583/faceclaw-tee.jpg?camera_label=person-6&s=800`, label: 'Person 6' },
+  { key: 'front',   url: `${BASE_API}/102044/faceclaw-tee.jpg`, label: 'Front' },
+  { key: 'folded',  url: `${BASE_API}/102046/faceclaw-tee.jpg`, label: 'Folded' },
 ] as const;
 
 type MockupKey = (typeof MOCKUPS)[number]['key'];
 
 export default function MerchPage() {
   const [size, setSize] = useState<Size>('M');
-  const [activeImg, setActiveImg] = useState<MockupKey>('front');
+  const [activeImg, setActiveImg] = useState<MockupKey>('person1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
