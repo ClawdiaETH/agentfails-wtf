@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,62 +7,82 @@ const PRICE_ID = 'price_1T2yvSLECHmgJcHTyztuGHca';
 const PRINTIFY_PRODUCT_ID = '6998a9e635ddad0d0308cebd';
 
 const VARIANT_IDS: Record<string, number> = {
-  S: 18100,
-  M: 18101,
-  L: 18102,
-  XL: 18103,
-  '2XL': 18104,
+  S:    18100,
+  M:    18101,
+  L:    18102,
+  XL:   18103,
+  '2XL':18104,
 };
 
 export async function POST(req: NextRequest) {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
     return NextResponse.json({ error: 'Stripe not configured', detail: 'STRIPE_SECRET_KEY missing' }, { status: 500 });
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2026-01-28.clover',
+  let size: string;
+  try {
+    const body = await req.json();
+    size = body.size;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  if (!size || !VARIANT_IDS[size]) {
+    return NextResponse.json({ error: 'Invalid size' }, { status: 400 });
+  }
+
+  const variantId = VARIANT_IDS[size];
+  const base = 'https://api.stripe.com/v1/checkout/sessions';
+
+  // Build URL-encoded form body (Stripe REST API uses application/x-www-form-urlencoded)
+  const params = new URLSearchParams({
+    mode: 'payment',
+    'line_items[0][price]': PRICE_ID,
+    'line_items[0][quantity]': '1',
+    'shipping_address_collection[allowed_countries][0]': 'US',
+    'shipping_address_collection[allowed_countries][1]': 'CA',
+    'shipping_address_collection[allowed_countries][2]': 'GB',
+    'shipping_address_collection[allowed_countries][3]': 'AU',
+    'shipping_address_collection[allowed_countries][4]': 'DE',
+    'shipping_address_collection[allowed_countries][5]': 'FR',
+    'shipping_address_collection[allowed_countries][6]': 'NL',
+    'shipping_address_collection[allowed_countries][7]': 'SE',
+    'shipping_address_collection[allowed_countries][8]': 'JP',
+    'shipping_address_collection[allowed_countries][9]': 'SG',
+    'metadata[size]': size,
+    'metadata[printify_product_id]': PRINTIFY_PRODUCT_ID,
+    'metadata[printify_variant_id]': String(variantId),
+    success_url: 'https://agentfails.wtf/merch/success?session_id={CHECKOUT_SESSION_ID}',
+    cancel_url: 'https://agentfails.wtf/merch',
   });
 
   try {
-    const body = await req.json();
-    const size: string = body.size;
-
-    if (!size || !VARIANT_IDS[size]) {
-      return NextResponse.json({ error: 'Invalid size' }, { status: 400 });
-    }
-
-    const variantId = VARIANT_IDS[size];
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price: PRICE_ID,
-          quantity: 1,
-        },
-      ],
-      shipping_address_collection: {
-        allowed_countries: [
-          'US', 'CA', 'GB', 'AU', 'DE', 'FR', 'NL', 'SE', 'NO', 'DK', 'FI', 'JP', 'SG', 'NZ',
-        ],
+    const res = await fetch(base, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      metadata: {
-        size,
-        printify_product_id: PRINTIFY_PRODUCT_ID,
-        printify_variant_id: String(variantId),
-      },
-      success_url: `https://agentfails.wtf/merch/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `https://agentfails.wtf/merch`,
+      body: params.toString(),
     });
 
-    return NextResponse.json({ url: session.url });
+    const data = await res.json() as any;
+
+    if (!res.ok) {
+      console.error('Stripe API error:', data);
+      return NextResponse.json({
+        error: 'Failed to create checkout session',
+        detail: data?.error?.message ?? JSON.stringify(data),
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({ url: data.url });
   } catch (err: any) {
-    console.error('Stripe checkout error:', err);
+    console.error('Fetch error:', err);
     return NextResponse.json({
       error: 'Failed to create checkout session',
       detail: err?.message ?? String(err),
-      type: err?.type,
-      code: err?.code,
     }, { status: 500 });
   }
 }
