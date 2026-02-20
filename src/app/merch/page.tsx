@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import SiteFooter from '@/components/SiteFooter';
+import { SiteFooter } from '@/components/SiteFooter';
 
 const SIZES = ['S', 'M', 'L', 'XL', '2XL'] as const;
 type Size = (typeof SIZES)[number];
